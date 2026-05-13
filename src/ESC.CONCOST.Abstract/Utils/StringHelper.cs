@@ -104,9 +104,28 @@ public static class StringHelper
         var value = GetValue(values, keys);
 
         value = value
-            .Replace(",", "")
             .Replace("%", "")
+            .Replace("％", "")
+            .Replace(" ", "")
             .Trim();
+
+        if (value.Contains(",") && !value.Contains("."))
+        {
+            var parts = value.Split(',');
+
+            if (parts.Length == 2 && parts[1].Length <= 2)
+            {
+                value = value.Replace(",", ".");
+            }
+            else
+            {
+                value = value.Replace(",", "");
+            }
+        }
+        else
+        {
+            value = value.Replace(",", "");
+        }
 
         return decimal.TryParse(
             value,
@@ -123,6 +142,8 @@ public static class StringHelper
         value = value
             .Replace(",", "")
             .Replace("원", "")
+            .Replace("₩", "")
+            .Replace(" ", "")
             .Trim();
 
         return long.TryParse(
@@ -132,7 +153,6 @@ public static class StringHelper
             out var result
         ) ? result : 0;
     }
-
     public static int GetIntValue(Dictionary<string, string> values, params string[] keys)
     {
         var value = GetValue(values, keys);
@@ -140,10 +160,14 @@ public static class StringHelper
         value = value
             .Replace(",", "")
             .Replace("일", "")
+            .Replace("days", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("day", "", StringComparison.OrdinalIgnoreCase)
+            .Replace(" ", "")
             .Trim();
 
         return int.TryParse(value, out var result) ? result : 0;
     }
+
 
     public static DateTime? GetDateValue(Dictionary<string, string> values, params string[] keys)
     {
