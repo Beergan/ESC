@@ -162,38 +162,85 @@ public class ESCService : MyServiceBase, IESCService
         {
             foreach (var row in worksheet.RowsUsed().Skip(1))
             {
-                var key = GetExcelCellText(row.Cell(1));
+                var key = NormalizeKey(GetExcelCellText(row.Cell(1)));
                 var value = GetExcelCellText(row.Cell(2));
 
                 if (!string.IsNullOrWhiteSpace(key))
                 {
-                    values[NormalizeKey(key)] = value;
+                    values[key] = value;
                 }
             }
 
             return MapDictionaryToContractWizard(values);
         }
 
-        // Dạng ngang: header row + data row
-        var headerRow = worksheet.Row(1);
-        var dataRow = worksheet.Row(2);
+        // Dạng ngang: tìm dòng header thật
+        var headerRow = FindExcelHeaderRow(worksheet);
+
+        if (headerRow == null)
+        {
+            return new ContractWizardDto();
+        }
+
+        var dataRow = worksheet.Row(headerRow.RowNumber() + 1);
 
         var lastColumn = headerRow.LastCellUsed()?.Address.ColumnNumber ?? 0;
 
         for (var col = 1; col <= lastColumn; col++)
         {
-            var key = GetExcelCellText(headerRow.Cell(col));
+            var key = NormalizeKey(GetExcelCellText(headerRow.Cell(col)));
             var value = GetExcelCellText(dataRow.Cell(col));
 
             if (!string.IsNullOrWhiteSpace(key))
             {
-                values[NormalizeKey(key)] = value;
+                values[key] = value;
             }
         }
 
         return MapDictionaryToContractWizard(values);
     }
+    private static IXLRow? FindExcelHeaderRow(IXLWorksheet worksheet)
+    {
+        var knownHeaders = new[]
+        {
+        "프로젝트명",
+        "공사명",
+        "Project Name",
+        "시공사",
+        "시공사명",
+        "Contractor",
+        "발주자",
+        "발주처명",
+        "Client",
+        "공사 종류",
+        "Construction Type",
+        "계약 방식",
+        "계약방법",
+        "Contract Method",
+        "계약 금액",
+        "계약금액",
+        "Contract Amount"
+    };
 
+        foreach (var row in worksheet.RowsUsed())
+        {
+            var cells = row.CellsUsed()
+                .Select(x => NormalizeKey(GetExcelCellText(x)))
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+
+            var matchedCount = cells.Count(cell =>
+                knownHeaders.Any(header =>
+                    string.Equals(cell, header, StringComparison.OrdinalIgnoreCase)));
+
+            if (matchedCount >= 2)
+            {
+                return row;
+            }
+        }
+
+        return worksheet.FirstRowUsed();
+    }
     private static bool IsVerticalTemplate(string firstCell, string secondCell)
     {
         return firstCell.Equals("항목", StringComparison.OrdinalIgnoreCase)
@@ -209,7 +256,24 @@ public class ESCService : MyServiceBase, IESCService
             return string.Empty;
         }
 
-        return cell.GetFormattedString()?.Trim() ?? string.Empty;
+        if (cell.DataType == XLDataType.DateTime)
+        {
+            return cell.GetDateTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
+        if (cell.DataType == XLDataType.Number)
+        {
+            var number = cell.GetDouble();
+
+            if (Math.Abs(number % 1) < 0.0000001)
+            {
+                return ((long)number).ToString(CultureInfo.InvariantCulture);
+            }
+
+            return number.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return cell.GetString()?.Trim() ?? string.Empty;
     }
     private static ContractWizardDto MapDictionaryToContractWizard(Dictionary<string, string> values)
     {
@@ -223,19 +287,19 @@ public class ESCService : MyServiceBase, IESCService
             ContractMethod = StringHelper.GetValue(values, "ContractMethod", "Contract Method", "계약방법", "계약 방식"),
             PreparedBy = StringHelper.GetValue(values, "PreparedBy", "Prepared By", "작성기관", "작성자"),
 
-            BidRate = StringHelper.GetDecimalValue(values, "BidRate", "Winning Rate (%)", "낙찰율 (%)", "낙찰율"),
+            BidRate = StringHelper.GetDecimalValue(values, "BidRate", "Winning Rate (%)", "Bid Rate (%)", "낙찰율 (%)", "낙찰율(%)", "낙찰율"),
             ContractAmount = StringHelper.GetLongValue(values, "ContractAmount", "Contract Value", "Contract Amount", "계약금액", "계약 금액"),
             AdvanceAmt = StringHelper.GetLongValue(values, "AdvanceAmt", "Advance Payment", "선금액", "선금"),
-            ExcludedAmt = StringHelper.GetLongValue(values, "ExcludedAmt", "Excluded Value", "Exclusion Amount", "적용제외금액(원)", "적용제외금액"),
+            ExcludedAmt = StringHelper.GetLongValue(values, "ExcludedAmt", "Excluded Value", "Exclusion Amount", "적용제외금액(원)", "적용제외금액", "제외 금액"),
 
             ContractDate = StringHelper.GetDateValue(values, "ContractDate", "Contract Date", "계약체결일", "계약일"),
             BidDate = StringHelper.GetDateValue(values, "BidDate", "Bid Date", "입찰일"),
-            StartDate = StringHelper.GetDateValue(values, "StartDate", "Start Date", "착공일"),
-            CompletionDate = StringHelper.GetDateValue(values, "CompletionDate", "Completion Date", "준공예정일", "준공일"),
+            StartDate = StringHelper.GetDateValue(values, "StartDate", "착공일"),
+            CompletionDate = StringHelper.GetDateValue(values, "CompletionDate", "준공예정일", "준공일"),
             CompareDate = StringHelper.GetDateValue(values, "CompareDate", "Adjustment Base Date", "조정기준일", "조정 기준일"),
 
-            ThresholdRate = StringHelper.GetDecimalValue(values, "ThresholdRate", "Escalation Rate", "Fluctuation Rate", "등락율 기준 (%)", "등락율 기준"),
-            ThresholdDays = StringHelper.GetIntValue(values, "ThresholdDays", "Threshold Days", "경과기간 기준 (일)", "경과기간 기준"),
+            ThresholdRate = StringHelper.GetDecimalValue(values, "ThresholdRate", "Escalation Rate", "Fluctuation Rate", "등락율 기준 (%)", "등락율 기준", "변동률"),
+            ThresholdDays = StringHelper.GetIntValue(values, "ThresholdDays", "Threshold Days", "경과기간 기준 (일)", "경과기간 기준", "임계일수"),
             PreviousMonth = StringHelper.GetValue(values, "PreviousMonth", "Previous Month", "직전연월", "전월")
         };
     }
@@ -346,110 +410,6 @@ public class ESCService : MyServiceBase, IESCService
         ("PreviousMonth", new[] { "Previous Month", "직전연월", "전월" })
     };
     }
-    private static Dictionary<string, string> ExtractPdfValues(string rawText)
-    {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (string.IsNullOrWhiteSpace(rawText))
-        {
-            return values;
-        }
-
-        var labels = GetContractPdfLabels();
-
-        var lines = rawText
-            .Replace("\r\n", "\n")
-            .Replace("\r", "\n")
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(x => Regex.Replace(x.Trim(), @"\s+", " "))
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .ToList();
-
-        foreach (var line in lines)
-        {
-            if (IsPdfHeaderOrDescriptionLine(line))
-            {
-                continue;
-            }
-
-            var extracted = TryExtractValueFromLine(line, labels);
-
-            if (extracted.HasValue)
-            {
-                var key = NormalizeKey(extracted.Value.Key);
-                var value = extracted.Value.Value?.Trim() ?? string.Empty;
-
-                // key phải là field thật, không phải "항목 내용"
-                if (!string.IsNullOrWhiteSpace(key))
-                {
-                    values[key] = value;
-                }
-            }
-        }
-
-        // Fallback nếu PDF bị dính thành 1 dòng dài
-        if (!values.Any())
-        {
-            var joinedText = string.Join("", lines);
-            values = ExtractPdfValuesFromJoinedText(joinedText, labels);
-        }
-
-        return values;
-    }
-    private static KeyValuePair<string, string>? TryExtractValueFromLine(
-    string line,
-    string[] labels)
-    {
-        foreach (var label in labels.OrderByDescending(x => x.Length))
-        {
-            if (!line.StartsWith(label, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var value = line.Substring(label.Length).Trim();
-
-            value = value
-                .TrimStart(':')
-                .TrimStart('：')
-                .Trim();
-
-            return new KeyValuePair<string, string>(label, value);
-        }
-
-        return null;
-    }
-    private static Dictionary<string, string> ExtractPdfValuesFromJoinedText(
-    string text,
-    string[] labels)
-    {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return values;
-        }
-
-        text = text
-            .Replace("항목내용", "")
-            .Replace("항목 내용", "")
-            .Replace("ItemValue", "")
-            .Replace("Item Value", "")
-            .Trim();
-
-        foreach (var label in labels.OrderByDescending(x => x.Length))
-        {
-            var value = ExtractValueBetweenLabels(text, label, labels);
-
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                values[NormalizeKey(label)] = value.Trim();
-            }
-        }
-
-        return values;
-    }
-
     private static string ExtractValueBetweenLabels(string text, string label, string[] allLabels)
     {
         var startIndex = text.IndexOf(label, StringComparison.OrdinalIgnoreCase);
@@ -515,53 +475,6 @@ public class ESCService : MyServiceBase, IESCService
             || line.Equals("Item", StringComparison.OrdinalIgnoreCase)
             || line.Equals("Value", StringComparison.OrdinalIgnoreCase);
     }
-    private static Dictionary<string, string> ExtractValuesFromJoinedPdfText(string text)
-    {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        text = NormalizePdfText(text);
-
-        var labels = new[]
-        {
-        "공사명",
-        "시공사명",
-        "발주처명",
-        "공사 종류",
-        "공사종류",
-        "계약방법",
-        "낙찰율 (%)",
-        "낙찰율(%)",
-        "작성기관",
-        "계약금액",
-        "선금액",
-        "계약체결일",
-        "입찰일",
-        "착공일",
-        "준공예정일",
-        "조정기준일",
-        "등락율 기준 (%)",
-        "등락율 기준",
-        "경과기간 기준 (일)",
-        "경과기간 기준",
-        "적용제외금액(원)",
-        "적용제외금액",
-        "직전연월"
-    };
-
-        foreach (var label in labels.OrderByDescending(x => x.Length))
-        {
-            var value = ExtractValueBetweenLabels(text, label, labels);
-
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                values[NormalizeKey(label)] = value.Trim();
-            }
-        }
-
-        return values;
-    }
-
-
 
     private static string NormalizePdfText(string text)
     {
@@ -579,140 +492,6 @@ public class ESCService : MyServiceBase, IESCService
             .Replace("ItemValue", "")
             .Replace("Item Value", "")
             .Trim();
-    }
-    private static List<KeyValuePair<string, string>> ExtractTableRowsFromPdfPage(UglyToad.PdfPig.Content.Page page)
-    {
-        var result = new List<KeyValuePair<string, string>>();
-
-        var words = page.GetWords()
-            .Where(w => !string.IsNullOrWhiteSpace(w.Text))
-            .Select(w => new
-            {
-                Text = w.Text.Trim(),
-                X = w.BoundingBox.Left,
-                Y = w.BoundingBox.Bottom
-            })
-            .OrderByDescending(w => w.Y)
-            .ThenBy(w => w.X)
-            .ToList();
-
-        if (!words.Any())
-        {
-            return result;
-        }
-
-        const double yTolerance = 4.0;
-
-        var lines = new List<List<dynamic>>();
-
-        foreach (var word in words)
-        {
-            var line = lines.FirstOrDefault(x =>
-                Math.Abs(((double)x[0].Y) - word.Y) <= yTolerance);
-
-            if (line == null)
-            {
-                line = new List<dynamic>();
-                lines.Add(line);
-            }
-
-            line.Add(word);
-        }
-
-        foreach (var line in lines)
-        {
-            var ordered = line.OrderBy(x => (double)x.X).ToList();
-
-            if (!ordered.Any())
-            {
-                continue;
-            }
-
-            var textLine = string.Join(" ", ordered.Select(x => (string)x.Text)).Trim();
-
-            if (string.IsNullOrWhiteSpace(textLine))
-            {
-                continue;
-            }
-
-            // Bỏ qua tiêu đề / mô tả ngoài bảng
-            if (textLine.Contains("ESC 데이터 입력 템플릿") ||
-                textLine.Contains("이 템플릿은") ||
-                textLine.Contains("각 항목 값을"))
-            {
-                continue;
-            }
-
-            // Cột trái của bảng thường nằm khoảng X < 230
-            // Cột phải nằm sau đó. Nếu layout thay đổi, có thể chỉnh ngưỡng này.
-            var leftWords = ordered.Where(x => (double)x.X < 230).Select(x => (string)x.Text).ToList();
-            var rightWords = ordered.Where(x => (double)x.X >= 230).Select(x => (string)x.Text).ToList();
-
-            var key = string.Join(" ", leftWords).Trim();
-            var value = string.Join(" ", rightWords).Trim();
-
-            if (string.IsNullOrWhiteSpace(key))
-            {
-                continue;
-            }
-
-            result.Add(new KeyValuePair<string, string>(key, value));
-        }
-
-        return result;
-    }
-    private static void AddPdfValue(
-    Dictionary<string, string> values,
-    string text,
-    params string[] labels)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return;
-        }
-
-        var lines = text
-            .Replace("\r\n", "\n")
-            .Replace("\r", "\n")
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(x => Regex.Replace(x.Trim(), @"\s+", " "))
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .ToList();
-
-        var sortedLabels = labels
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .OrderByDescending(x => x.Length)
-            .ToList();
-
-        foreach (var line in lines)
-        {
-            if (line.Equals("항목 내용", StringComparison.OrdinalIgnoreCase) ||
-                line.Equals("Item Value", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            foreach (var label in sortedLabels)
-            {
-                var pattern = "^" + Regex.Escape(label) + @"\s*[:：]?\s*(.+)$";
-                var match = Regex.Match(line, pattern, RegexOptions.IgnoreCase);
-
-                if (!match.Success)
-                {
-                    continue;
-                }
-
-                var value = match.Groups[1].Value.Trim();
-
-                if (string.IsNullOrWhiteSpace(value))
-                {
-                    continue;
-                }
-
-                values[NormalizeKey(label)] = value;
-                return;
-            }
-        }
     }
     public async Task<ResultOf<ContractWizardDto>> ReadSampleFileAsync([Body] ContractSampleFileRequest request)
     {
@@ -769,90 +548,5 @@ public class ESCService : MyServiceBase, IESCService
         }
 
         return Regex.Replace(value.Trim(), @"\s+", " ");
-    }
-    private static string[] GetContractPdfLabels()
-    {
-        return new[]
-        {
-        "Project Name",
-        "프로젝트명",
-        "공사명",
-
-        "Contractor",
-        "시공사명",
-        "시공사",
-
-        "Investor",
-        "Client",
-        "발주처명",
-        "발주자",
-
-        "Construction Type",
-        "Work Type",
-        "공사 종류",
-        "공사종류",
-
-        "Contract Method",
-        "계약방법",
-        "계약 방식",
-
-        "Winning Rate (%)",
-        "Bid Rate (%)",
-        "낙찰율 (%)",
-        "낙찰율(%)",
-        "낙찰율",
-
-        "Prepared By",
-        "작성기관",
-        "작성자",
-
-        "Contract Value",
-        "Contract Amount",
-        "계약금액",
-        "계약 금액",
-
-        "Advance Payment",
-        "선금액",
-        "선금",
-
-        "Contract Date",
-        "계약체결일",
-        "계약일",
-
-        "Bid Date",
-        "입찰일",
-
-        "Start Date",
-        "착공일",
-
-        "Completion Date",
-        "준공예정일",
-        "준공일",
-
-        "Adjustment Base Date",
-        "조정기준일",
-        "조정 기준일",
-
-        "Escalation Rate",
-        "Fluctuation Rate",
-        "등락율 기준 (%)",
-        "등락율 기준",
-        "변동률",
-
-        "Threshold Days",
-        "경과기간 기준 (일)",
-        "경과기간 기준",
-        "임계일수",
-
-        "Excluded Value",
-        "Exclusion Amount",
-        "적용제외금액(원)",
-        "적용제외금액",
-        "제외 금액",
-
-        "Previous Month",
-        "직전연월",
-        "전월"
-    };
     }
 }

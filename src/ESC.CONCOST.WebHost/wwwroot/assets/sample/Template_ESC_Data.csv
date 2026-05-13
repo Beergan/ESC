@@ -1,2 +1,0 @@
-ProjectName,Contractor,Client,WorkType,ContractMethod,BidRate,ContractAmount,AdvanceAmt,ContractDate,BidDate,StartDate,CompletionDate,CompareDate,ThresholdRate,ThresholdDays,ExcludedAmt,PreviousMonth
-Project A,Contractor B,Client C,Electrical,Long-term,87.5,1250000000,0,2024-01-15,2023-12-10,2024-02-01,2025-02-01,2024-08-01,3.0,90,0,2024-07
