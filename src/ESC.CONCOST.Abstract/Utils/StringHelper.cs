@@ -1,4 +1,8 @@
-﻿namespace ESC.CONCOST.Abstract;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+
+namespace ESC.CONCOST.Abstract;
 
 public static class StringHelper
 {
@@ -80,5 +84,95 @@ public static class StringHelper
     {
         int r = 1;
         return int.TryParse(value, out r) ? r : 1;
+    }
+
+    public static string GetValue(Dictionary<string, string> values, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (values.TryGetValue(key, out var value))
+            {
+                return value?.Trim() ?? string.Empty;
+            }
+        }
+
+        return string.Empty;
+    }
+
+    public static decimal GetDecimalValue(Dictionary<string, string> values, params string[] keys)
+    {
+        var value = GetValue(values, keys);
+
+        value = value
+            .Replace(",", "")
+            .Replace("%", "")
+            .Trim();
+
+        return decimal.TryParse(
+            value,
+            NumberStyles.Any,
+            CultureInfo.InvariantCulture,
+            out var result
+        ) ? result : 0;
+    }
+
+    public static long GetLongValue(Dictionary<string, string> values, params string[] keys)
+    {
+        var value = GetValue(values, keys);
+
+        value = value
+            .Replace(",", "")
+            .Replace("원", "")
+            .Trim();
+
+        return long.TryParse(
+            value,
+            NumberStyles.Any,
+            CultureInfo.InvariantCulture,
+            out var result
+        ) ? result : 0;
+    }
+
+    public static int GetIntValue(Dictionary<string, string> values, params string[] keys)
+    {
+        var value = GetValue(values, keys);
+
+        value = value
+            .Replace(",", "")
+            .Replace("일", "")
+            .Trim();
+
+        return int.TryParse(value, out var result) ? result : 0;
+    }
+
+    public static DateTime? GetDateValue(Dictionary<string, string> values, params string[] keys)
+    {
+        var value = GetValue(values, keys);
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var formats = new[]
+        {
+        "yyyy-MM-dd",
+        "yyyy/MM/dd",
+        "yyyy.MM.dd",
+        "MM/dd/yyyy",
+        "dd/MM/yyyy"
+    };
+
+        if (DateTime.TryParseExact(
+                value,
+                formats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var exactDate))
+        {
+            return exactDate;
+        }
+
+        return DateTime.TryParse(value, out var date) ? date : null;
     }
 }

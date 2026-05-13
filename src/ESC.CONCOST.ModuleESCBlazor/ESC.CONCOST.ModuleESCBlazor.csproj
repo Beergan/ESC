@@ -9,9 +9,11 @@
 		<BlazorLinkOnBuild Condition="'$(Configuration)'!='Release'">false</BlazorLinkOnBuild>
 	</PropertyGroup>
 	<ItemGroup>
+		<PackageReference Include="ClosedXML" Version="0.105.0" />
 		<PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="8.0.10" />
 		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.10" />
 		<PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="8.0.10" />
+		<PackageReference Include="PdfPig" Version="0.1.14" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\ESC.CONCOST.Abstract\ESC.CONCOST.Abstract.csproj" />

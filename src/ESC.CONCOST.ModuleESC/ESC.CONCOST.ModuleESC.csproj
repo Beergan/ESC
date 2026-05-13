@@ -10,8 +10,10 @@
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 	</ItemGroup>
 	<ItemGroup>
+		<PackageReference Include="ClosedXML" Version="0.105.0" />
 		<PackageReference Include="MailKit" Version="4.16.0" />
 		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.10" />
+		<PackageReference Include="PdfPig" Version="0.1.14" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\ESC.CONCOST.Base\ESC.CONCOST.Base.csproj" />

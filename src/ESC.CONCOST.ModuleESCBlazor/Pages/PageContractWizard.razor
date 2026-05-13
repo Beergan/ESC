@@ -1,5 +1,6 @@
 @page "/escalation/create"
 @using System.Globalization
+@using System.IO
 @attribute [Authorize]
 
 @inject NavigationManager Navigation
@@ -843,20 +844,127 @@
         }
     }
 
-    private void OnSampleFilesChanged(InputFileChangeEventArgs e)
+    private async Task OnSampleFilesChanged(InputFileChangeEventArgs e)
     {
         var maxAllowedFiles = 5;
         var maxFileSize = 10 * 1024 * 1024; // 10 MB
 
         foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
         {
-            if (file.Size <= maxFileSize && !UploadedSampleFiles.Any(f => f.Name == file.Name))
+            if (file.Size > maxFileSize)
+            {
+                await Alert.Error(
+                    Text["파일 크기는 10MB를 초과할 수 없습니다.|File size cannot exceed 10MB."],
+                    Text["오류|Error"]
+                );
+                continue;
+            }
+
+            if (!UploadedSampleFiles.Any(f => f.Name == file.Name))
             {
                 UploadedSampleFiles.Add(file);
             }
+
+            var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+
+            if (extension == ".xlsx" || extension == ".xls" || extension == ".pdf")
+            {
+                await ReadSampleFileAsync(file);
+            }
         }
     }
+    private async Task ReadSampleFileAsync(IBrowserFile file)
+    {
+        try
+        {
+            IsBusy = true;
 
+            await using var stream = file.OpenReadStream(10 * 1024 * 1024);
+            using var memoryStream = new MemoryStream();
+
+            await stream.CopyToAsync(memoryStream);
+
+            var request = new ContractSampleFileRequest
+            {
+                FileName = file.Name,
+                ContentBase64 = Convert.ToBase64String(memoryStream.ToArray())
+            };
+
+            var result = await ESCService.ReadSampleFileAsync(request);
+
+            if (result == null || !result.Success || result.Item == null)
+            {
+                await Alert.Error(
+                    string.IsNullOrWhiteSpace(result?.Message)
+                        ? Text["샘플 파일을 읽을 수 없습니다.|Cannot read sample file."]
+                        : Text[result.Message],
+                    Text["오류|Error"]
+                );
+
+                return;
+            }
+
+            ApplySampleModel(result.Item);
+
+            await Alert.Alert(
+                Text["성공|Success"],
+                Text["샘플 데이터를 불러왔습니다.|Sample data has been loaded."]
+            );
+        }
+        catch
+        {
+            await Alert.Error(
+                Text["샘플 파일을 읽는 중 오류가 발생했습니다.|An error occurred while reading the sample file."],
+                Text["오류|Error"]
+            );
+        }
+        finally
+        {
+            IsBusy = false;
+            StateHasChanged();
+        }
+    }
+    private void ApplySampleModel(ContractWizardDto sample)
+    {
+        Model.ProjectName = sample.ProjectName;
+        Model.Contractor = sample.Contractor;
+        Model.Client = sample.Client;
+        Model.WorkType = sample.WorkType;
+        Model.ContractMethod = sample.ContractMethod;
+        Model.BidRate = sample.BidRate;
+        Model.PreparedBy = sample.PreparedBy;
+
+        Model.ContractAmount = sample.ContractAmount;
+        Model.AdvanceAmt = sample.AdvanceAmt;
+        Model.ContractDate = sample.ContractDate;
+        Model.BidDate = sample.BidDate;
+        Model.StartDate = sample.StartDate;
+        Model.CompletionDate = sample.CompletionDate;
+
+        Model.CompareDate = sample.CompareDate;
+        Model.ThresholdRate = sample.ThresholdRate;
+        Model.ThresholdDays = sample.ThresholdDays;
+        Model.ExcludedAmt = sample.ExcludedAmt;
+        Model.PreviousMonth = sample.PreviousMonth;
+
+        SelectedCategory = ActiveCategories.FirstOrDefault(x =>
+            string.Equals(x.Name, Model.WorkType, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(x.NameEn, Model.WorkType, StringComparison.OrdinalIgnoreCase));
+
+        SelectedContract = ActiveContracts.FirstOrDefault(x =>
+            string.Equals(x.Name, Model.ContractMethod, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(x.NameEn, Model.ContractMethod, StringComparison.OrdinalIgnoreCase));
+
+        if (SelectedCategory != null)
+        {
+            Model.WorkType = SelectedCategory.Name;
+        }
+
+        if (SelectedContract != null)
+        {
+            Model.ContractMethod = SelectedContract.Name;
+        }
+    }
     private void RemoveSampleFile(IBrowserFile file)
     {
         UploadedSampleFiles.Remove(file);
@@ -866,9 +974,23 @@
     {
         try
         {
-            var fileUrl = "/assets/sample/Template_ESC_Data.csv";
-            var fileName = "Template_ESC_Data.csv";
-            
+            // Determine which template to serve based on current language.
+            string fileUrl;
+            string fileName;
+
+            if (Text.IsKorean)
+            {
+                // Korean template
+                fileUrl = "/assets/sample/Template_ESC_Data_KR.xlsx";
+                fileName = "Template_ESC_Data_KR.xlsx";
+            }
+            else
+            {
+                // English template
+                fileUrl = "/assets/sample/Template_ESC_Data_EN.xlsx";
+                fileName = "Template_ESC_Data_EN.xlsx";
+            }
+
             await JSRuntime.InvokeVoidAsync("uploadHelper.downloadFile", fileUrl, fileName);
         }
         catch (Exception ex)
@@ -879,13 +1001,23 @@
             );
         }
     }
-
     private async Task DownloadPdfTemplate()
     {
         try
         {
-            var fileUrl = "/assets/sample/Template_ESC_Data.pdf";
-            var fileName = "Template_ESC_Data.pdf";
+            // Select PDF template based on language
+            string fileUrl;
+            string fileName;
+            if (Text.IsKorean)
+            {
+                fileUrl = "/assets/sample/Template_ESC_Data_KR.pdf";
+                fileName = "Template_ESC_Data_KR.pdf";
+            }
+            else
+            {
+                fileUrl = "/assets/sample/Template_ESC_Data_EN.pdf";
+                fileName = "Template_ESC_Data_EN.pdf";
+            }
             
             await JSRuntime.InvokeVoidAsync("uploadHelper.downloadFile", fileUrl, fileName);
         }

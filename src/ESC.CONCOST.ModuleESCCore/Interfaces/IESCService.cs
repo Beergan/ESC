@@ -16,4 +16,7 @@ public interface IESCService : IServiceBase
 
     [Post("CreateContract")]
     Task<ResultOf<Contract>> CreateContractAsync(ContractWizardDto model);
+
+    [Post("ReadSampleFile")]
+    Task<ResultOf<ContractWizardDto>> ReadSampleFileAsync([Body] ContractSampleFileRequest request);
 }

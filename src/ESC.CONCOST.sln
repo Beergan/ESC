@@ -49,8 +49,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ESC.CONCOST.ModuleESCBlazor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ESC.CONCOST.ModuleESCCore", "ESC.CONCOST.ModuleESCCore\ESC.CONCOST.ModuleESCCore.csproj", "{0BEBD3D2-CAFF-A5FD-5F7A-53641802FEDB}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ESC.CONCOST.ModuleESCCore.Tests", "ESC.CONCOST.ModuleESCCore.Tests\ESC.CONCOST.ModuleESCCore.Tests.csproj", "{FA2D942C-0BB3-4532-B456-7E5DB56382DE}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -277,18 +275,6 @@ Global
 		{0BEBD3D2-CAFF-A5FD-5F7A-53641802FEDB}.Release|x64.Build.0 = Release|Any CPU
 		{0BEBD3D2-CAFF-A5FD-5F7A-53641802FEDB}.Release|x86.ActiveCfg = Release|Any CPU
 		{0BEBD3D2-CAFF-A5FD-5F7A-53641802FEDB}.Release|x86.Build.0 = Release|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Debug|x64.Build.0 = Debug|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Debug|x86.Build.0 = Debug|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Release|Any CPU.Build.0 = Release|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Release|x64.ActiveCfg = Release|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Release|x64.Build.0 = Release|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Release|x86.ActiveCfg = Release|Any CPU
-		{FA2D942C-0BB3-4532-B456-7E5DB56382DE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -7,6 +7,10 @@
 		<NoWarn>1591;1998;BL0005;</NoWarn>
 	</PropertyGroup>
 	<ItemGroup>
+	  <PackageReference Include="ClosedXML" Version="0.105.0" />
+	  <PackageReference Include="PdfPig" Version="0.1.14" />
+	</ItemGroup>
+	<ItemGroup>
 		<ProjectReference Include="..\ESC.CONCOST.Abstract\ESC.CONCOST.Abstract.csproj" />
 	</ItemGroup>
 </Project>
