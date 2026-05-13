@@ -19,4 +19,7 @@ public interface IESCService : IServiceBase
 
     [Post("ReadSampleFile")]
     Task<ResultOf<ContractWizardDto>> ReadSampleFileAsync([Body] ContractSampleFileRequest request);
+
+    [Delete("DeleteContract/{guid}")]
+    Task<Result> DeleteContractAsync([Path] Guid guid);
 }

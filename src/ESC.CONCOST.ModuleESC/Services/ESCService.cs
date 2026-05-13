@@ -410,72 +410,7 @@ public class ESCService : MyServiceBase, IESCService
         ("PreviousMonth", new[] { "Previous Month", "직전연월", "전월" })
     };
     }
-    private static string ExtractValueBetweenLabels(string text, string label, string[] allLabels)
-    {
-        var startIndex = text.IndexOf(label, StringComparison.OrdinalIgnoreCase);
-
-        if (startIndex < 0)
-        {
-            return string.Empty;
-        }
-
-        var valueStart = startIndex + label.Length;
-
-        while (valueStart < text.Length &&
-               (text[valueStart] == ':' ||
-                text[valueStart] == '：' ||
-                char.IsWhiteSpace(text[valueStart])))
-        {
-            valueStart++;
-        }
-
-        var nextIndex = -1;
-
-        foreach (var nextLabel in allLabels.OrderByDescending(x => x.Length))
-        {
-            if (nextLabel == label)
-            {
-                continue;
-            }
-
-            var index = text.IndexOf(nextLabel, valueStart, StringComparison.OrdinalIgnoreCase);
-
-            if (index < 0)
-            {
-                continue;
-            }
-
-            if (nextIndex == -1 || index < nextIndex)
-            {
-                nextIndex = index;
-            }
-        }
-
-        if (nextIndex > valueStart)
-        {
-            return text.Substring(valueStart, nextIndex - valueStart).Trim();
-        }
-
-        return text.Substring(valueStart).Trim();
-    }
-    private static bool IsPdfHeaderOrDescriptionLine(string line)
-    {
-        if (string.IsNullOrWhiteSpace(line))
-        {
-            return true;
-        }
-
-        return line.Contains("ESC 데이터 입력 템플릿")
-            || line.Contains("이 템플릿은")
-            || line.Contains("각 항목 값을")
-            || line.Equals("항목 내용", StringComparison.OrdinalIgnoreCase)
-            || line.Equals("항목", StringComparison.OrdinalIgnoreCase)
-            || line.Equals("내용", StringComparison.OrdinalIgnoreCase)
-            || line.Equals("Item Value", StringComparison.OrdinalIgnoreCase)
-            || line.Equals("Item", StringComparison.OrdinalIgnoreCase)
-            || line.Equals("Value", StringComparison.OrdinalIgnoreCase);
-    }
-
+  
     private static string NormalizePdfText(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -548,5 +483,60 @@ public class ESCService : MyServiceBase, IESCService
         }
 
         return Regex.Replace(value.Trim(), @"\s+", " ");
+    }
+    //detele 
+    public async Task<Result> DeleteContractAsync(Guid guid)
+    {
+        using (var db = _ctx.ConnectDb())
+        {
+            try
+            {
+                var currentUser = _ctx.GetCurrentUser();
+                var customerId = currentUser?.CustomerId;
+
+                if (!customerId.HasValue)
+                {
+                    return new Result
+                    {
+                        Success = false,
+                        Message = _ctx.Text["고객 정보가 없는 계정은 ESC 프로젝트를 삭제할 수 없습니다.|An account without customer information cannot delete ESC projects."]
+                    };
+                }
+
+                var contract = await db.Repo<Contract>()
+                    .GetOneEdit(x => x.Guid == guid && x.CustomerId == customerId);
+
+                if (contract == null)
+                {
+                    return new Result
+                    {
+                        Success = false,
+                        Message = _ctx.Text["삭제할 프로젝트를 찾을 수 없습니다.|The project to delete was not found."]
+                    };
+                }
+
+                await db.Repo<Contract>().Remove(contract);
+
+                _log.LogInformation(
+                    "Contract deleted successfully. ContractId={ContractId}, Guid={Guid}, CustomerId={CustomerId}, ProjectName={ProjectName}",
+                    contract.Id,
+                    contract.Guid,
+                    contract.CustomerId,
+                    contract.ProjectName
+                );
+
+                return new Result { Success = true };
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error deleting contract. Guid={Guid}", guid);
+
+                return new Result
+                {
+                    Success = false,
+                    Message = _ctx.Text["삭제 중 오류가 발생했습니다.|An error occurred while deleting."]
+                };
+            }
+        }
     }
 }
