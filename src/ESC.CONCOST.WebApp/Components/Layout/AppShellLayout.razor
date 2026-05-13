@@ -1,0 +1,682 @@
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject NavigationManager NavigationManager
+@inject ITextTranslator Text
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IJSRuntime JSRuntime
+@inject IBlazorContext BlazorContext
+
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISweetAlertService Swal
+@inject ESC.CONCOST.Abstract.LayoutService LayoutService
+@inject IAuthService AuthService
+
+<MudThemeProvider Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<style>
+    :root {
+        --navy:            #1e3a5f;
+        --navy-dark:       #0d2137;
+        --navy-gradient:   linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%);
+        --accent:          #1e3a5f;
+        --accent-dark:     #0d2137;
+        --accent-light:    #f1f5f9;
+        --accent-gradient: linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%);
+        --bg:              #f4f6f9;
+        --radius:          20px;
+        --shadow-card:     0 2px 16px rgba(0,0,0,0.07);
+    }
+
+    /* ── HEADER ── */
+    .esc-header {
+        position: sticky;
+        top: 0;
+        z-index: 1050;
+        background: #fff;
+        border-bottom: 1px solid rgba(0,0,0,0.07);
+        box-shadow: 0 2px 12px rgba(30,58,95,0.06);
+        min-height: 70px;
+        display: flex;
+        align-items: center;
+        padding: 0 24px;
+        gap: 16px;
+    }
+
+    .esc-logo-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        min-width: 200px;
+    }
+
+    .esc-logo-wrap img { height: 36px; }
+
+    .esc-logo-name {
+        font-size: 15px;
+        font-weight: 900;
+        color: var(--navy);
+        letter-spacing: -.3px;
+    }
+
+    /* center nav pills */
+    .esc-nav-pills {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 1;
+    }
+
+    .esc-nav-pill {
+        padding: 7px 18px;
+        border-radius: 50rem;
+        font-size: 13px;
+        font-weight: 700;
+        color: #475569;
+        text-decoration: none;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .esc-nav-pill:hover { background: var(--accent-light); color: var(--accent); }
+    .esc-nav-pill.active { background: var(--navy-gradient); color: #fff; box-shadow: 0 4px 14px rgba(30,58,95,.25); }
+
+    /* nav separator */
+    .esc-nav-sep {
+        width: 1px;
+        height: 18px;
+        background: rgba(0,0,0,0.10);
+        border-radius: 2px;
+        margin: 0 4px;
+        flex-shrink: 0;
+    }
+
+    /* right utilities */
+    .esc-header-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-left: auto;
+    }
+
+    .esc-icon-btn {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        border: 1px solid rgba(0,0,0,0.06);
+        color: #475569;
+        font-size: 15px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        position: relative;
+    }
+    .esc-icon-btn:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+
+    .esc-avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: var(--navy-gradient);
+        color: #fff;
+        font-weight: 800;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(30,58,95,0.25);
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .esc-lang-pill {
+        padding: 5px 12px;
+        border-radius: 50rem;
+        background: #f1f5f9;
+        border: 1px solid rgba(0,0,0,0.06);
+        font-size: 12px;
+        font-weight: 700;
+        color: #475569;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s;
+        text-decoration: none;
+    }
+    .esc-lang-pill:hover { background: var(--accent-light); color: var(--accent); }
+
+    /* Dropdown improvements */
+    .esc-dropdown {
+        min-width: 220px;
+        border: 1px solid rgba(0,0,0,0.07);
+        border-radius: 16px;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+        padding: 8px;
+    }
+
+    .esc-dropdown .dropdown-item {
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #475569;
+        transition: all 0.15s;
+    }
+    .esc-dropdown .dropdown-item:hover { background: var(--accent-light); color: var(--accent); }
+    .esc-dropdown .dropdown-item.text-danger:hover { background: #fff5f5; color: #dc2626; }
+
+    /* Mobile header */
+    .mob-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        background: #fff;
+        border-bottom: 1px solid rgba(0,0,0,0.07);
+        position: sticky;
+        top: 0;
+        z-index: 1050;
+    }
+
+    /* page wrapper */
+    .main-page-wrapper { background: var(--bg); }
+
+    /* active menu underline */
+    .menu-parent-link.active-menu {
+        background: var(--navy-gradient) !important;
+        color: #fff !important;
+        border-radius: 50rem;
+    }
+</style>
+@* === MAIN HEADER NAVBAR === *@
+<header class="esc-header d-none d-lg-flex">
+    @* Logo *@
+    <a class="esc-logo-wrap" href="/">
+        <img src="@_logoUrl" alt="Logo" />
+        <span class="esc-logo-name">ESC CONCOST</span>
+    </a>
+        @* Center Nav Pills *@
+    <nav class="esc-nav-pills">
+        @* ESC Module *@
+        <button class="esc-nav-pill @(_activeMenu == "escalation" ? "active" : "")"
+                @onclick='() => Navigate("/escalation/workspace", "escalation")'>
+            <i class="fa-solid fa-bolt me-1"></i> @Text["ESC 물가변동|ESC"]
+        </button>
+
+        <span class="esc-nav-sep"></span>
+
+        @* Employee Module *@
+        <button class="esc-nav-pill @(_activeMenu == "employee" ? "active" : "")"
+                @onclick='() => Navigate("/employee/list", "employee")'>
+            <i class="fa-solid fa-users me-1"></i> @Text["인사|HR"]
+        </button>
+
+        @* Settings (admin only) *@
+        @if (BlazorContext.CheckPermission(ESC.CONCOST.ModuleManagementCore.PERMISSION.ADMIN_ACCOUNTS))
+        {
+            <span class="esc-nav-sep"></span>
+            
+            <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/management/account") ? "active" : "")"
+                    @onclick='() => Navigate("/management/account", "settings")'>
+                <i class="fa-solid fa-user-group me-1"></i> @Text["계정 목록|Accounts"]
+            </button>
+
+            <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/management/permission-group") ? "active" : "")"
+                    @onclick='() => Navigate("/management/permission-group", "settings")'>
+                <i class="fa-solid fa-user-shield me-1"></i> @Text["권한 설정|Permissions"]
+            </button>
+
+            <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/settings/construction-categories") ? "active" : "")"
+                    @onclick='() => Navigate("/settings/construction-categories", "settings")'>
+                <i class="fa-solid fa-layer-group me-1"></i> @Text["공종|Work Types"]
+            </button>
+
+            <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/settings/contract-categories") ? "active" : "")"
+                    @onclick='() => Navigate("/settings/contract-categories", "settings")'>
+                <i class="fa-solid fa-file-contract me-1"></i> @Text["계약구분|Contract Methods"]
+            </button>
+        }
+    </nav>
+
+    @* Right Utilities *@
+    <div class="esc-header-right">
+        @* Language *@
+        <div class="dropdown">
+            <a class="esc-lang-pill dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                @(Text.CurrentLang == "ko" ? "🇰🇷 한국어" : "🇺🇸 English")
+            </a>
+            <ul class="dropdown-menu esc-dropdown dropdown-menu-end mt-2">
+                <li>
+                    <button class="dropdown-item" @onclick='() => SwitchLang("ko")'>
+                        🇰🇷 한국어
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item" @onclick='() => SwitchLang("en")'>
+                        🇺🇸 English
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        @* Bell Notification *@
+        <div class="dropdown">
+            <a class="esc-icon-btn" href="#" data-bs-toggle="dropdown" @onclick="ResetThongBao">
+                <i class="fa-regular fa-bell"></i>
+                @if (thongbao > 0)
+                {
+                    <span class="position-absolute badge bg-danger rounded-pill"
+                          style="font-size:8px;padding:2px 5px;top:2px;right:2px;">@thongbao</span>
+                }
+            </a>
+            <div class="dropdown-menu esc-dropdown dropdown-menu-end mt-2" style="width:320px;padding:0;overflow:hidden;">
+                <div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:800;color:#1e3a5f;">
+                    @Text["알림|Thông báo"]
+                </div>
+                <div style="max-height:360px;overflow-y:auto;">
+                    @foreach (var notify in _notifies.Items.Take(20))
+                    {
+                        <a @key="notify" href="@notify.Href"
+                           class="dropdown-item d-flex align-items-start gap-3 py-3"
+                           @onclick='() => _activeMenu = "tasks"' @onclick:preventDefault="false">
+                            <div style="width:32px;height:32px;border-radius:10px;background:#fef3e8;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                                <i class="fa-solid fa-bullhorn" style="color:rgb(30, 41, 59);font-size:13px;"></i>
+                            </div>
+                            <div>
+                                <div style="font-size:12px;font-weight:700;color:#1e293b;">@Text[notify.Message]</div>
+                                <div style="font-size:10px;color:#94a3b8;margin-top:2px;">
+                                    @(Text.CurrentLang == "ko" ? notify.NotityTime.AddHours(9).ToString("dd/MM/yyyy HH:mm") : notify.NotityTime.AddHours(7).ToString("dd/MM/yyyy HH:mm"))
+                                </div>
+                            </div>
+                        </a>
+                    }
+                    @if (!_notifies.Items.Any())
+                    {
+                        <div class="text-center py-4" style="color:#94a3b8;font-size:12px;">
+                            <i class="fa-solid fa-bell-slash d-block mb-2 fs-5 opacity-50"></i>
+                            @Text["알림이 없습니다.|Chưa có thông báo nào"]
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Avatar + Profile menu *@
+        <div class="dropdown">
+            <a href="#" data-bs-toggle="dropdown" style="text-decoration:none;">
+                <div class="esc-avatar">
+                    @if (!string.IsNullOrEmpty(avata))
+                    {
+                        <img src="@avata" style="width:100%;height:100%;object-fit:cover;" alt="Avatar" />
+                    }
+                    else
+                    {
+                        @(_fullName?.Length >= 2 ? _fullName.Substring(0, 2).ToUpper() : "U")
+                    }
+                </div>
+            </a>
+            <ul class="dropdown-menu esc-dropdown dropdown-menu-end mt-2">
+                <li class="px-3 py-2" style="border-bottom:1px solid #f1f5f9;">
+                    <div style="font-size:13px;font-weight:800;color:#1e3a5f;">@_fullName</div>
+                </li>
+                <li>
+                    <a class="dropdown-item mt-1" href="/employee/profile/@_employeeGuid">
+                        <i class="fa-solid fa-id-card me-2" style="color:rgb(30, 41, 59);"></i>
+                        @Text["인사 정보|Thông tin nhân sự"]
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="/account/change-password">
+                        <i class="fa-solid fa-shield-halved me-2" style="color:#0ea5e9;"></i>
+                        @Text["비밀번호 변경|Đổi mật khẩu"]
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider my-1 opacity-25"></li>
+                <li>
+                    <button class="dropdown-item text-danger" @onclick="Logout">
+                        <i class="fa-solid fa-power-off me-2"></i>
+                        @Text["로그아웃|Đăng xuất"]
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+</header>
+
+@* === MOBILE HEADER === *@
+<div class="d-lg-none mob-header">
+    <a href="/">
+        <img src="@_logoUrl" alt="Logo" height="28" />
+    </a>
+    <div class="d-flex align-items-center gap-2">
+        <div class="position-relative">
+            <i class="fa-regular fa-bell fs-5 text-dark"></i>
+            @if (thongbao > 0)
+            {
+                <span class="badge bg-danger rounded-pill position-absolute" style="font-size:8px;padding:2px 4px;top:-4px;right:-6px;">@thongbao</span>
+            }
+        </div>
+        <div class="esc-avatar" style="width:32px;height:32px;font-size:12px;">
+            @if (!string.IsNullOrEmpty(avata))
+            {
+                <img src="@avata" style="width:100%;height:100%;object-fit:cover;" />
+            }
+            else
+            {
+                @(_fullName?.Length >= 2 ? _fullName.Substring(0, 2).ToUpper() : "U")
+            }
+        </div>
+        <button class="btn btn-link p-0 text-dark" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasProfile">
+            <i class="fa-solid fa-bars fs-5"></i>
+        </button>
+    </div>
+</div>
+
+<ProfileSidePanel FullName="@_fullName" />
+
+@* === MAIN CONTENT === *@
+<div class="main-page-wrapper" id="main-content"
+     style="min-height:calc(100vh - 70px); overflow-y:auto; background:var(--bg);">
+    <div class="container-fluid py-4" style="max-width: 1280px;">
+        @Body
+    </div>
+</div>
+
+@* ============================================================
+   GLOBAL BACKGROUND UPLOADS PROGRESS
+   ============================================================ *@
+@inject ESC.CONCOST.Abstract.IBackgroundUploadService GlobalUploadSvc
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 2000; width: 350px;">
+    @* FIX: Thêm @key để Blazor diff đúng khi list thay đổi *@
+    @foreach (var upload in GlobalUploadSvc.ActiveUploads)
+    {
+        <div @key="upload.FileGuid" class="card border-0 shadow-lg rounded-4 mb-2 animate-slide-up" style="background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);">
+            <div class="card-body p-3">
+                <div class="d-flex align-items-center mb-2">
+                    <div class="me-3">
+                        @if (upload.IsCompleted)
+                        {
+                            <i class="fas fa-check-circle text-success fs-4"></i>
+                        }
+                        else if (!string.IsNullOrEmpty(upload.Error))
+                        {
+                            <i class="fas fa-exclamation-circle text-danger fs-4"></i>
+                        }
+                        else
+                        {
+                            <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+                        }
+                    </div>
+                    <div class="flex-grow-1 overflow-hidden">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="small fw-bold text-truncate d-block" title="@upload.FileName">@upload.FileName</span>
+                            <span class="badge rounded-pill @(upload.IsCompleted ? "bg-success" : "bg-primary")" style="font-size: 9px;">@upload.Progress%</span>
+                        </div>
+                        <div class="progress mt-1" style="height: 4px;">
+                            <div class="progress-bar @(upload.IsCompleted ? "bg-success" : "progress-bar-striped progress-bar-animated")" 
+                                 role="progressbar" style="width: @upload.Progress%"></div>
+                        </div>
+                        @if (!string.IsNullOrEmpty(upload.Error))
+                        {
+                            <div class="text-danger mt-1" style="font-size: 10px;">@upload.Error</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .animate-slide-up { animation: slideUp 0.3s ease-out; }
+    @@keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+</style>
+
+
+
+@code {
+    private MudTheme _theme = new MudTheme()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#1e3a5f",
+            AppbarBackground = "#1e3a5f",
+            Secondary = "#475569",
+            Warning = "#f59e0b",
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = "#1e3a5f",
+        }
+    };
+
+    private string? _activeMenu;
+    private Guid _employeeGuid = Guid.Empty;
+
+    // ---- User profile data ----
+    private string? _fullName = "Admin User";
+    private string? _position = "Admin/HCNS";
+    private string? _department = "Ban Giám Đốc";
+
+    // ---- Sample upcoming birthdays ----
+    private List<ProfileSidePanel.BirthdayItem> _birthdays = new()
+    {
+        new("Hoàng", "04-16"),
+        new("Tuân",  "04-18"),
+        new("Anh",   "04-20"),
+    };
+
+    private HubConnection? _hubConnection;
+    private string _logoUrl = "/assets/images/logo-mains.png";
+    private string avata = "";
+    private ResultsOf<ModelNotification> _notifies = new() { Items = new List<ModelNotification>() };
+    private int thongbao = 0;
+
+    // FIX: Track subscription để tránh unsubscribe khi chưa subscribe
+    private bool _contextNotifySubscribed = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        LayoutService.OnNotifyChanged += HandleLayoutChanged;
+        GlobalUploadSvc.OnChange += HandleLayoutChanged;
+        NavigationManager.LocationChanged += OnLocationChanged;
+
+        // FIX: Bỏ StateHasChanged() trong DetectMenuFromUrl khi gọi từ OnInitializedAsync
+        // vì Blazor tự render lại sau khi OnInitializedAsync hoàn tất
+        DetectMenuFromUrl(NavigationManager.Uri, notifyChange: false);
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            var user = authState.User;
+            var logoClaim = user.Claims.FirstOrDefault(x => x.Type == "CompanyLogo")?.Value;
+            if (!string.IsNullOrEmpty(logoClaim)) _logoUrl = logoClaim;
+
+            var langClaim = user.Claims.FirstOrDefault(x => x.Type == "PreferredLang")?.Value;
+            if (!string.IsNullOrEmpty(langClaim) && langClaim != Text.CurrentLang)
+            {
+                Text.SetLang(langClaim);
+            }
+
+            var empGuidClaim = user.Claims.FirstOrDefault(x => x.Type == "GuidEmployee")?.Value;
+            if (Guid.TryParse(empGuidClaim, out var guidResult)) _employeeGuid = guidResult;
+
+            var avatarClaim = user.Claims.FirstOrDefault(x => x.Type == "Avatar")?.Value;
+            if (!string.IsNullOrEmpty(avatarClaim)) avata = avatarClaim;
+
+            var fullNameClaim = user.Claims.FirstOrDefault(x => x.Type == "FullName")?.Value ?? user.Identity?.Name;
+            if (!string.IsNullOrEmpty(fullNameClaim)) _fullName = fullNameClaim;
+
+            var token = await BlazorContext.GetAuthToken();
+
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/NotifyHub"), options =>
+                {
+                    options.AccessTokenProvider = () => Task.FromResult(token);
+                })
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<string, string[]>("Notify", HandleNotify);
+
+            try
+            {
+                await _hubConnection.StartAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error connecting to NotifyHub: {ex.Message}");
+            }
+
+            // Load initial notifies
+            _notifies = await BlazorContext.Notifier.GetNotifies(_employeeGuid);
+
+            // FIX: Track subscription trước khi += để Dispose an toàn
+            BlazorContext.OnNotify += HandleContextNotify;
+            _contextNotifySubscribed = true;
+        }
+    }
+
+    private void ResetThongBao()
+    {
+        // FIX: Chỉ reset và re-render khi thực sự có thông báo
+        if (thongbao > 0)
+        {
+            thongbao = 0;
+            StateHasChanged();
+        }
+    }
+
+    // FIX: async void phải có try-catch để tránh crash app khi exception xảy ra
+    private async void HandleContextNotify(string evt, string[] data)
+    {
+        try
+        {
+            if (evt == "GOT_NEW_NOTIFICATION")
+            {
+                await RefreshNotifies();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"HandleContextNotify error: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshNotifies()
+    {
+        _notifies = await BlazorContext.Notifier.GetNotifies(_employeeGuid);
+        if (_notifies.Items.Any())
+        {
+            // FIX: Dùng Interlocked để tránh race condition khi SignalR và BlazorContext
+            // gọi RefreshNotifies đồng thời
+            var current = Interlocked.Increment(ref thongbao);
+            if (current > 99) Interlocked.Exchange(ref thongbao, 99);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleLayoutChanged() => InvokeAsync(StateHasChanged);
+
+    // FIX: Thêm tham số notifyChange để tránh gọi StateHasChanged dư thừa
+    // khi được gọi từ OnInitializedAsync
+    private void DetectMenuFromUrl(string url, bool notifyChange = true)
+    {
+        var path = NavigationManager.ToBaseRelativePath(url).ToLower();
+        if (path.StartsWith("escalation")) _activeMenu = "escalation";
+        else if (path.StartsWith("employee") || path.StartsWith("orgchart") || path.StartsWith("category")) _activeMenu = "employee";
+        else if (path.StartsWith("management") || path.StartsWith("settings")) _activeMenu = "settings";
+        else _activeMenu = "home";
+
+        if (notifyChange) StateHasChanged();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        DetectMenuFromUrl(e.Location);
+    }
+
+    // FIX: async void phải có try-catch để tránh crash app khi exception xảy ra
+    private async void HandleNotify(string evt, string[] data)
+    {
+        try
+        {
+            if (evt == "REFRESH_PERMISSION" || evt == "REFRESH_PERMISSION_USER")
+            {
+                if (AuthStateProvider is HostAuthenticationStateProvider hostAuthStateProvider)
+                {
+                    hostAuthStateProvider.NotifyRefresh();
+                }
+                await Swal.Alert(Text["Quyền hạn của bạn đã được cập nhật.|권한이 업데이트되었습니다."], Text["Cập nhật|업데이트"]);
+                await InvokeAsync(StateHasChanged);
+            }
+            else if (evt == "FORCE_LOGOUT" || evt == "FORCE_LOGOUT_USER")
+            {
+                await Swal.Error(Text["Quyền hạn của bạn đã thay đổi. Vui lòng đăng nhập lại.|권한이 변경되었습니다. 다시 로그인해 주세요."], Text["Đăng xuất|로그아웃"]);
+                Logout();
+            }
+            else if (evt == "GOT_NEW_NOTIFICATION")
+            {
+                await RefreshNotifies();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"HandleNotify error: {ex.Message}");
+        }
+    }
+
+    private void Navigate(string url, string menu)
+    {
+        _activeMenu = menu;
+        NavigationManager.NavigateTo(url);
+    }
+
+    private void SetActiveMenu(string menu) => _activeMenu = menu;
+
+    // ---- Mobile panel state ----
+    private string? _mobPanel = null;
+    private string? _mobSection = null;
+    private void SetMobPanel(string panel)
+    {
+        _mobPanel = _mobPanel == panel ? null : panel;
+        _mobSection = null;
+    }
+
+    private void Logout() => NavigationManager.NavigateTo("/logout", true);
+
+    private void SwitchLang(string lang)
+    {
+        Text.SetLang(lang);
+        NavigationManager.NavigateTo(NavigationManager.Uri, true);
+    }
+
+    // FIX: Dùng IAsyncDisposable thay vì IDisposable để await HubConnection.DisposeAsync()
+    public async ValueTask DisposeAsync()
+    {
+        LayoutService.OnNotifyChanged -= HandleLayoutChanged;
+        GlobalUploadSvc.OnChange -= HandleLayoutChanged;
+        NavigationManager.LocationChanged -= OnLocationChanged;
+
+        // FIX: Chỉ unsubscribe nếu đã subscribe trước đó
+        if (_contextNotifySubscribed)
+        {
+            BlazorContext.OnNotify -= HandleContextNotify;
+        }
+
+        // FIX: Await đúng cách thay vì fire-and-forget
+        if (_hubConnection != null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+    }
+}

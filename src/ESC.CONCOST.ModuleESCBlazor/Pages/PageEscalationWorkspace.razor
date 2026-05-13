@@ -1,0 +1,131 @@
+@page "/escalation/workspace"
+@attribute [Authorize]
+@inject NavigationManager Navigation
+@inject ITextTranslator Text
+@inject IESCService ESCService
+
+<div class="erp-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="erp-page-title">
+            <i class="fa-solid fa-calculator"></i>
+            @Text["ESC 프로젝트 목록|ESC Project List"]
+        </h2>
+        <a href="/escalation/create" class="erp-btn-add">
+            <i class="fa-solid fa-plus"></i>
+            @Text["새 프로젝트|New Project"]
+        </a>
+    </div>
+
+    <div class="erp-card">
+        @if (IsLoading)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status"></div>
+                <div class="fw-bold">@Text["데이터를 불러오는 중...|Loading data..."]</div>
+            </div>
+        }
+        else
+        {
+            <CustomTable DataSource="@Contracts" 
+                         PageSize="15" 
+                         AllowFiltering="true"
+                         SearchPlaceholder="@Text["프로젝트 검색...|Search project..."]"
+                         WrapperClass="erp-table-premium border-0 shadow-none p-0">
+                <Columns>
+                    <TableColumn TItem="Contract" Title="@Text["프로젝트|Project"]" Sortable="true" Property="ProjectName">
+                        <Template>
+                            <div class="erp-link-name">@context.ProjectName</div>
+                            <div class="erp-meta-info mt-1">
+                                <i class="fa-solid fa-hard-hat"></i> @context.WorkType
+                            </div>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Contract" Title="@Text["발주처|Client"]" Sortable="true" Property="Client">
+                        <Template>
+                            <span class="erp-badge-status bg-primary-soft text-primary">@context.Client</span>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Contract" Title="@Text["계약일|Contract Date"]" Sortable="true" Property="ContractDate">
+                        <Template>
+                            <div class="erp-meta-info fw-bold text-dark">
+                                <i class="fa-regular fa-calendar-check text-primary"></i>
+                                @context.ContractDate.ToString("yyyy-MM-dd")
+                            </div>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Contract" Title="@Text["계약금액|Contract Amount"]" Sortable="true" Property="ContractAmount">
+                        <Template>
+                            <div class="fw-bold text-navy" style="font-family: monospace;">@context.ContractAmount.ToString("N0")</div>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Contract" Title="@Text["상태|Status"]" Sortable="true">
+                        <Template>
+                            <span class="erp-badge-status bg-success-soft text-success">
+                                <i class="fa-solid fa-check-double"></i>
+                                @Text["진행중|In Progress"]
+                            </span>
+                        </Template>
+                    </TableColumn>
+                </Columns>
+                <Actions>
+                    <button class="btn btn-sm btn-light text-primary" style="border-radius: 8px;" title="@Text["상세보기|View Details"]">
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </Actions>
+            </CustomTable>
+        }
+    </div>
+</div>
+
+@code {
+    private List<Contract> Contracts { get; set; } = new();
+    private bool IsLoading { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try 
+        {
+            IsLoading = true;
+            Contracts = await ESCService.GetContractsAsync();
+            
+            if (Contracts == null || Contracts.Count == 0)
+            {
+                LoadSampleData();
+            }
+        }
+        catch(Exception ex)
+        {
+            Console.WriteLine($"Error fetching contracts: {ex.Message}");
+            LoadSampleData();
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void LoadSampleData()
+    {
+        Contracts = new List<Contract>
+        {
+            new Contract { 
+                ProjectName = "조천정수장 고도정수처리시설 전기공사", 
+                Client = "한국수자원공사", 
+                WorkType = "전기공사",
+                ContractDate = new DateTime(2024, 1, 15),
+                ContractAmount = 1250000000 
+            },
+            new Contract { 
+                ProjectName = "A-Project Water Treatment Plant Construction", 
+                Client = "Ministry of Infrastructure", 
+                WorkType = "Civil Works",
+                ContractDate = new DateTime(2024, 3, 20),
+                ContractAmount = 4800000000 
+            }
+        };
+    }
+}

@@ -1,0 +1,84 @@
+@typeparam TValue
+@using ESC.CONCOST.Abstract
+@inject ITextTranslator Text
+
+<div class="dropdown vibrant-select shadow-sm @CssClass">
+    <button class="btn dropdown-toggle w-100 text-start d-flex align-items-center justify-content-between" 
+            type="button" 
+            data-bs-toggle="dropdown" 
+            aria-expanded="false"
+            disabled="@Disabled">
+        <span class="text-truncate @(IsPlaceholder() ? "text-muted opacity-50" : "text-dark")">
+            @(GetSelectedText())
+        </span>
+    </button>
+    <ul class="dropdown-menu w-100 shadow-lg border-0 py-2">
+        @if (!string.IsNullOrEmpty(Placeholder))
+        {
+            <li>
+                <button class="dropdown-item @(IsPlaceholder() ? "active" : "")" 
+                        type="button" 
+                        @onclick="() => OnItemClick(default)">
+                    -- @Placeholder --
+                </button>
+            </li>
+        }
+        @if (Items != null)
+        {
+            @foreach (var item in Items)
+            {
+                <li>
+                    <button class="dropdown-item @(IsActive(item.Value) ? "active" : "")" 
+                            type="button" 
+                            @onclick="() => OnItemClick(item.Value)">
+                        @item.Text
+                    </button>
+                </li>
+            }
+        }
+    </ul>
+</div>
+
+@code {
+    [Parameter] public List<OptionItem<TValue>> Items { get; set; } = new();
+    [Parameter] public TValue Value { get; set; }
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    [Parameter] public EventCallback<TValue> OnChange { get; set; }
+    [Parameter] public string Placeholder { get; set; }
+    [Parameter] public string CssClass { get; set; } = "";
+    [Parameter] public bool Disabled { get; set; } = false;
+
+    protected override void OnInitialized()
+    {
+        Placeholder ??= Text["선택...|Select..."];
+    }
+
+    private string GetSelectedText()
+    {
+        var selected = Items?.FirstOrDefault(x => EqualityComparer<TValue>.Default.Equals(x.Value, Value));
+        return selected?.Text ?? $"-- {Placeholder} --";
+    }
+
+    private bool IsPlaceholder()
+    {
+        return EqualityComparer<TValue>.Default.Equals(Value, default);
+    }
+
+    private bool IsActive(TValue itemValue)
+    {
+        return EqualityComparer<TValue>.Default.Equals(Value, itemValue);
+    }
+
+    private async Task OnItemClick(TValue itemValue)
+    {
+        Value = itemValue;
+        if (ValueChanged.HasDelegate)
+        {
+            await ValueChanged.InvokeAsync(Value);
+        }
+        if (OnChange.HasDelegate)
+        {
+            await OnChange.InvokeAsync(Value);
+        }
+    }
+}

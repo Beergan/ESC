@@ -1,0 +1,152 @@
+@implements IDisposable
+@inject NavigationManager NavigationManager
+@inject ITextTranslator Text
+
+<style>
+    .esc-subnav {
+        background: #fff;
+        border-bottom: 1px solid rgba(0,0,0,0.07);
+        padding: 0 24px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        height: 48px;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .esc-subnav::-webkit-scrollbar { display: none; }
+
+    .esc-subnav-section {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding-right: 12px;
+        margin-right: 8px;
+        border-right: 1px solid rgba(0,0,0,0.08);
+        height: 100%;
+    }
+
+    .esc-subnav-section:last-child {
+        border-right: none;
+        padding-right: 0;
+        margin-right: 0;
+    }
+
+    .esc-subnav-label {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .8px;
+        text-transform: uppercase;
+        color: #94a3b8;
+        padding: 0 8px;
+        white-space: nowrap;
+    }
+
+    .esc-subnav-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 14px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #475569;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: all 0.2s;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .esc-subnav-link i {
+        font-size: 13px;
+        opacity: 0.7;
+    }
+
+    .esc-subnav-link:hover {
+        background: #fef3e8;
+        color: rgb(30, 41, 59);
+    }
+
+    .esc-subnav-link:hover i { opacity: 1; color: rgb(30, 41, 59); }
+
+    .esc-subnav-link.active {
+        background: linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%);
+        color: #fff;
+        box-shadow: 0 3px 12px rgba(30,58,95,0.25);
+    }
+
+    .esc-subnav-link.active i { opacity: 1; color: #fff; }
+</style>
+
+<div class="esc-subnav d-none d-lg-flex">
+
+    @* === ESC 업무 === *@
+    <div class="esc-subnav-section">
+        <span class="esc-subnav-label">
+            <i class="fa-solid fa-bolt" style="color:rgb(30, 41, 59);margin-right:3px;"></i>
+            @Text["ESC 업무|ESC"]
+        </span>
+        <a class="esc-subnav-link @IsActive("/escalation/workspace")" href="/escalation/workspace">
+            <i class="fa-solid fa-chart-line"></i>
+            @Text["ESC 워크스페이스|Workspace"]
+        </a>
+    </div>
+
+    @* === 인사 === *@
+    <div class="esc-subnav-section">
+        <span class="esc-subnav-label">
+            <i class="fa-solid fa-users" style="margin-right:3px;"></i>
+            @Text["인사|HR"]
+        </span>
+        <a class="esc-subnav-link @IsActive("/employee/list")" href="/employee/list">
+            <i class="fa-solid fa-users-viewfinder"></i>
+            @Text["직원 목록|Employees"]
+        </a>
+    </div>
+
+    @* === 시스템 === *@
+    <div class="esc-subnav-section">
+        <span class="esc-subnav-label">
+            <i class="fa-solid fa-gears" style="margin-right:3px;"></i>
+            @Text["시스템|System"]
+        </span>
+        <a class="esc-subnav-link @IsActive("/management/account")" href="/management/account">
+            <i class="fa-solid fa-user-group"></i>
+            @Text["계정 목록|Accounts"]
+        </a>
+        <a class="esc-subnav-link @IsActive("/management/permission-group")" href="/management/permission-group">
+            <i class="fa-solid fa-user-shield"></i>
+            @Text["권한 설정|Permissions"]
+        </a>
+    </div>
+
+</div>
+
+@code {
+    [Parameter] public string? ActiveMenu { get; set; }
+    [Parameter] public string? FullName { get; set; }
+    [Parameter] public RenderFragment? CustomHeader { get; set; }
+
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+    }
+
+    private string IsActive(string path)
+    {
+        var current = "/" + NavigationManager.ToBaseRelativePath(NavigationManager.Uri).ToLowerInvariant().TrimStart('/');
+        if (path == "/" && current == "/") return "active";
+        if (path == "/") return string.Empty;
+        return current.StartsWith(path.ToLowerInvariant()) ? "active" : string.Empty;
+    }
+}

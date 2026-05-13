@@ -1,0 +1,274 @@
+@page "/management/account"
+@attribute [Authorize]
+@inject IManagementAccountService _svc
+@inject IServiceBase _svcBa
+@inject ISweetAlertService swal
+@inject ITextTranslator Text
+@inject NavigationManager NavigationManager
+@using ESC.CONCOST.SharedComponents.Components
+
+<div class="erp-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="erp-page-title">
+            <i class="fa-solid fa-user-gear"></i>
+            @Text["계정 관리|Account Management"]
+        </h2>
+    </div>
+
+    <div class="erp-card">
+        @if (_checkPermissionAdmin)
+        {
+            <CustomTable DataSource="@_dataSource"
+                         PageSize="20"
+                         WrapperClass="erp-table-premium border-0 shadow-none p-0"
+                         AllowFiltering="true"
+                         SearchPlaceholder="@Text["직원 이름 검색...|Search employees..."]">
+                <Columns>
+                    <TableColumn TItem="ModelEmployeeAccount" Title="@Text["성명|Name"]" Sortable="true" Property="FullName">
+                        <Template>
+                            <div class="d-flex align-items-center">
+                                <div class="erp-avatar-circle me-3">
+                                    @(string.IsNullOrEmpty(context.FullName) ? "?" : context.FullName[0].ToString().ToUpper())
+                                </div>
+                                <div>
+                                    <a class="erp-link-name" href="/employee/profile/@context.GuidEmployee">
+                                        @context.FullName
+                                    </a>
+                                    <div class="erp-meta-info" style="text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px;">
+                                        @(Text.IsKorean ? context.JobNameKo : context.JobNameVi)
+                                    </div>
+                                </div>
+                            </div>
+                        </Template>
+                    </TableColumn>
+                    
+                    <TableColumn TItem="ModelEmployeeAccount" Title="@Text["이메일 / 연락처|Email / Phone"]">
+                        <Template>
+                            <div class="erp-meta-info" style="flex-direction: column; align-items: flex-start; gap: 2px;">
+                                <div class="text-dark"><i class="fa-solid fa-envelope me-1 opacity-50"></i> @context.Email</div>
+                                <div class="text-muted"><i class="fa-solid fa-phone me-1 opacity-50"></i> @context.Phone</div>
+                            </div>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="ModelEmployeeAccount" Title="@Text["사용자 ID|User ID"]" Sortable="true" Property="UserName">
+                        <Template>
+                            @if (context.UserName != "-")
+                            {
+                                <span class="badge bg-light text-navy fw-bold border" style="font-size: 11px; padding: 5px 10px; border-radius: 8px;">
+                                    @context.UserName
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small italic">@Text["미등록|Unregistered"]</span>
+                            }
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="ModelEmployeeAccount" Title="@Text["상태|Status"]" Sortable="true">
+                        <Template>
+                            @if (context.Locked == null)
+                            {
+                                <span class="erp-badge-status bg-warning-soft text-warning">
+                                    <i class="fa-solid fa-user-clock"></i> @Text["미등록|Not Created"]
+                                </span>
+                            }
+                            else if (context.Locked == true)
+                            {
+                                <span class="erp-badge-status bg-success-soft text-success">
+                                    <i class="fa-solid fa-user-check"></i> @Text["사용 중|Active"]
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="erp-badge-status bg-danger-soft text-danger">
+                                    <i class="fa-solid fa-user-slash"></i> @Text["잠김|Locked"]
+                                </span>
+                            }
+                        </Template>
+                    </TableColumn>
+                </Columns>
+                <Actions>
+                    <div class="d-flex gap-2">
+                        @if (context.UserName == "-")
+                        {
+                            <button class="btn btn-sm btn-light text-primary" style="border-radius: 8px;" @onclick="() => OpenCreateModal(context)" title="@Text["계정 생성|Create Account"]">
+                                <i class="fa-solid fa-user-plus"></i>
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-light text-orange" style="border-radius: 8px;" @onclick="() => OpenChangePasswordModal(context)" title="@Text["비밀번호 변경|Change Password"]">
+                                <i class="fa-solid fa-key"></i>
+                            </button>
+                        }
+                    </div>
+                </Actions>
+            </CustomTable>
+        }
+        else
+        {
+            <div class="text-center py-5">
+                <i class="fa-solid fa-lock fs-1 text-muted opacity-20 mb-3"></i>
+                <h5 class="fw-bold">@Text["접근 권한이 없습니다!|Access Denied"]</h5>
+            </div>
+        }
+    </div>
+</div>
+
+@* Modal: Tạo tài khoản *@
+<ModalComponent @ref="_modalEdit" Title="@_modalEditTitle" OnConfirm="OnFormEditSubmit">
+    <EditForm Model="@_modelEdit" id="accountForm">
+        <DataAnnotationsValidator />
+        <div class="row g-4">
+            <div class="col-md-6">
+                <label class="form-label-bold">@Text["성|Last Name"]</label>
+                <input type="text" class="form-control-custom bg-light" value="@_modelEdit.LastName" disabled />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label-bold">@Text["이름|First Name"]</label>
+                <input type="text" class="form-control-custom bg-light" value="@_modelEdit.FirstName" disabled />
+            </div>
+            <div class="col-md-12">
+                <label class="form-label-bold">@Text["사용자 ID|User ID"] *</label>
+                <InputText class="form-control-custom" @bind-Value="_modelEdit.UserName" placeholder="@Text["사용자 ID|User ID"]" />
+                <CustomValidationMessage For="@(() => _modelEdit.UserName)" />
+            </div>
+            <div class="col-md-12">
+                <label class="form-label-bold">@Text["비밀번호|Password"] *</label>
+                <InputText class="form-control-custom" @bind-Value="_modelEdit.Password" placeholder="@Text["비밀번호|Password"]" />
+                <CustomValidationMessage For="@(() => _modelEdit.Password)" />
+            </div>
+            <div class="col-md-12">
+                <label class="form-label-bold">@Text["권한 그룹|Permission Group"] *</label>
+                <select class="form-select form-control-custom" @bind="_modelEdit.GuidPrimissions">
+                    <option value="">@Text["그룹 선택|Select Group"]</option>
+                    @foreach (var role in _optRoles)
+                    {
+                        <option value="@role.Value">@role.Text</option>
+                    }
+                </select>
+                <CustomValidationMessage For="@(() => _modelEdit.GuidPrimissions)" />
+            </div>
+        </div>
+    </EditForm>
+</ModalComponent>
+
+@* Modal: Đổi mật khẩu *@
+<ModalComponent @ref="_modalPwd" Title="@Text["비밀번호 변경|Change Password"]" OnConfirm="OnFormPwdChangeSubmit">
+    <EditForm Model="@_modelPwdChange" id="pwdForm">
+        <DataAnnotationsValidator />
+        <div class="row g-4">
+            <div class="col-12">
+                <label class="form-label-bold">@Text["사용자 ID|User ID"]</label>
+                <input type="text" class="form-control-custom bg-light" value="@_modelPwdChange.UserName" disabled />
+            </div>
+            <div class="col-12">
+                <label class="form-label-bold">@Text["새 비밀번호|New Password"] *</label>
+                <InputText type="password" class="form-control-custom" @bind-Value="_modelPwdChange.Password" />
+                <CustomValidationMessage For="@(() => _modelPwdChange.Password)" />
+            </div>
+            <div class="col-12">
+                <label class="form-label-bold">@Text["비밀번호 확인|Confirm Password"] *</label>
+                <InputText type="password" class="form-control-custom" @bind-Value="_modelPwdChange.PasswordConfirm" />
+                <CustomValidationMessage For="@(() => _modelPwdChange.PasswordConfirm)" />
+            </div>
+        </div>
+    </EditForm>
+</ModalComponent>
+
+@code {
+    #region variables
+    [Inject] NavigationManager _navManager { get; set; }
+    private IEnumerable<ModelEmployeeAccount> _dataSource = new List<ModelEmployeeAccount>();
+    private ModelUserAccount _modelEdit = new();
+    private ModelPasswordChange _modelPwdChange = new();
+    private List<OptionItem<Guid>> _optRoles = new();
+    private ModalComponent _modalEdit = default!;
+    private ModalComponent _modalPwd = default!;
+    private bool _checkPermissionAdmin;
+    private string _modalEditTitle = string.Empty;
+    #endregion
+
+    #region events
+    protected override async Task OnInitializedAsync()
+    {
+        _checkPermissionAdmin = await _svc.CheckPermissionAdmin();
+
+        if (_checkPermissionAdmin) 
+        {
+            await ResetData();
+        }
+    }
+    #endregion
+
+    #region methods
+    private async Task ResetData()
+    {
+        var rsp = await AppStatic.CallApi(() => _svc.GetListEmployeeAccount());
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+
+        _dataSource = rsp.Items;
+
+        var rsp2 = await AppStatic.CallApi(() => _svc.GetListRoles());
+        if (!rsp2.Success)
+        {
+            _ = swal.Error(rsp2.Message);
+            return;
+        }
+
+        _optRoles = rsp2.Items.ToList();
+        StateHasChanged();
+    }
+
+    private async Task OnFormEditSubmit()
+    {
+        string BaseUri = NavigationManager.BaseUri.ToString();
+
+        var rsp = await AppStatic.CallApi(() => _svc.CreateUser(_modelEdit, BaseUri));
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+
+        await _modalEdit.Close();
+        await ResetData();
+        _ = swal.Alert(Text["Saved!", "Tài khoản đã được tạo!"]);
+    }
+
+    private async Task OnFormPwdChangeSubmit()
+    {
+        var rsp = await AppStatic.CallApi(() => _svc.ChangePassword(_modelPwdChange));
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+
+        await _modalPwd.Close();
+        await ResetData();
+    }
+
+    private void OpenCreateModal(ModelEmployeeAccount item)
+    {
+        item.TransferTo(_modelEdit);
+        _modelEdit.Phone = item.Phone;
+        _modelEdit.Password = RandomPassword.GeneratePassword();
+        _modalEditTitle = Text["계정 생성|Create Account"];
+        _modalEdit.Show();
+    }
+
+    private void OpenChangePasswordModal(ModelEmployeeAccount item)
+    {
+        _modelPwdChange = new();
+        _modelPwdChange.UserName = item.UserName;
+        _modalPwd.Show();
+    }
+    #endregion
+}

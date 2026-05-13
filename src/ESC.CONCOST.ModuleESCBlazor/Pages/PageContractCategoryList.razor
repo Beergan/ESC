@@ -1,0 +1,172 @@
+@page "/settings/contract-categories"
+@attribute [Authorize]
+@inject ITextTranslator Text
+@inject IContractCategoryService CategoryService
+@inject ISweetAlertService Alert
+@using ESC.CONCOST.SharedComponents.Components
+
+<div class="erp-container">
+    <div class="d-flex justify-content-between align-items-center">
+        <h2 class="erp-page-title">
+            <i class="fa-solid fa-file-contract"></i>
+            @Text["계약 구분 관리|Contract Categories"]
+        </h2>
+        <button class="erp-btn-add" @onclick="() => OpenModal()">
+            <i class="fa-solid fa-plus"></i> @Text["구분 추가|Add Category"]
+        </button>
+    </div>
+
+    <div class="erp-card">
+        <CustomTable DataSource="@Categories" AllowFiltering="true" SearchPlaceholder="@Text["구분 검색...|Search categories..."]" WrapperClass="erp-table-premium border-0 shadow-none p-0">
+            <Columns>
+                <TableColumn TItem="ContractCategory" Title="@Text["구분명|Category Name"]" Property="Name">
+                    <Template>
+                        <div class="erp-link-name">
+                            @(Text.IsKorean ? context.Name : context.NameEn)
+                        </div>
+                    </Template>
+                </TableColumn>
+                <TableColumn TItem="ContractCategory" Title="@Text["설명|Description"]" Property="Description" />
+                <TableColumn TItem="ContractCategory" Title="@Text["정렬|Sort"]" Property="SortOrder" />
+                <TableColumn TItem="ContractCategory" Title="@Text["상태|Status"]">
+                    <Template>
+                        @if (context.IsActive)
+                        {
+                            <span class="erp-badge-status bg-success-soft text-success">
+                                <i class="fa-solid fa-circle-check"></i> @Text["사용중|Active"]
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="erp-badge-status bg-light text-muted">
+                                <i class="fa-solid fa-circle-minus"></i> @Text["미사용|Inactive"]
+                            </span>
+                        }
+                    </Template>
+                </TableColumn>
+            </Columns>
+            <Actions>
+                <button class="btn btn-sm btn-light text-primary me-1" style="border-radius: 8px;" @onclick="() => OpenModal(context)">
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn btn-sm btn-light text-danger" style="border-radius: 8px;" @onclick="() => ConfirmDelete(context)">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </Actions>
+        </CustomTable>
+    </div>
+</div>
+
+<ModalComponent @ref="_modal" Title="@(_isEdit ? Text["구분 수정|Edit Category"] : Text["구분 추가|Add Category"])" OnConfirm="SaveCategory">
+    <div class="row g-4">
+        <div class="col-md-6">
+            <label class="form-label-bold">@Text["구분명 (KO)|Category Name (KO)"] *</label>
+            <input type="text" class="form-control-custom" @bind="_editModel.Name" placeholder="e.g. 계속비" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label-bold">@Text["구분명 (EN)|Category Name (EN)"] *</label>
+            <input type="text" class="form-control-custom" @bind="_editModel.NameEn" placeholder="e.g. Lump sum" />
+        </div>
+        <div class="col-12">
+            <label class="form-label-bold">@Text["설명|Description"]</label>
+            <textarea class="form-control-custom" @bind="_editModel.Description" rows="3"></textarea>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label-bold">@Text["정렬 순서|Sort Order"]</label>
+            <input type="number" class="form-control-custom" @bind="_editModel.SortOrder" />
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" @bind="_editModel.IsActive" id="isActiveSwitch">
+                <label class="form-check-label fw-bold" for="isActiveSwitch">@Text["활성화|Active"]</label>
+            </div>
+        </div>
+    </div>
+</ModalComponent>
+
+@code {
+    private List<ContractCategory> Categories = new();
+    private ModalComponent _modal = default!;
+    private ContractCategory _editModel = new();
+    private bool _isEdit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var result = await CategoryService.GetCategories();
+        Categories = result.Items.ToList();
+    }
+
+    private void OpenModal(ContractCategory? model = null)
+    {
+        if (model != null)
+        {
+            _isEdit = true;
+            _editModel = new ContractCategory
+            {
+                Id = model.Id,
+                Guid = model.Guid,
+                Description = model.Description,
+                SortOrder = model.SortOrder,
+                IsActive = model.IsActive,
+                Name = model.Name,
+				NameEn = model.NameEn
+            };
+        }
+        else
+        {
+            _isEdit = false;
+            _editModel = new ContractCategory
+            {
+                SortOrder = Categories.Count + 1,
+                IsActive = true
+            };
+        }
+
+        _ = _modal.Show();
+    }
+
+    private async Task SaveCategory()
+    {
+        if (string.IsNullOrWhiteSpace(_editModel.Name) || string.IsNullOrWhiteSpace(_editModel.NameEn))
+        {
+            await Alert.Error(Text["한국어와 영어 구분명을 모두 입력해주세요.|Please enter both Korean and English category names."], Text["오류|Error"]);
+            return;
+        }
+
+        var result = await CategoryService.SaveCategory(_editModel);
+        if (result.Success)
+        {
+            await LoadData();
+            await _modal.Close();
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+
+    private async Task ConfirmDelete(ContractCategory model)
+    {
+        var displayName = Text.IsKorean ? model.Name : model.NameEn;
+        var confirm = await Alert.ConfirmDelete(Text[$"'{displayName}' 구분을 삭제하시겠습니까?|Are you sure you want to delete category '{displayName}'?"], Text["삭제 확인|Delete Confirmation"]);
+
+        if (confirm)
+        {
+            var result = await CategoryService.DeleteCategory(model.Guid);
+            if (result.Success)
+            {
+                await LoadData();
+            }
+            else
+            {
+                await Alert.Error(result.Message, Text["오류|Error"]);
+            }
+        }
+    }
+
+}

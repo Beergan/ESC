@@ -1,0 +1,253 @@
+/* ============================================================
+   Header / Navbar styles - ported from UI prototype
+   ============================================================ */
+
+/* Google Font – Noto Sans (matches prototype) */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap');
+
+/* Override MudBlazor body font if needed */
+body {
+    font-family: 'Noto Sans', sans-serif;
+}
+
+/* Top navbar wrapper */
+.navbar-header {
+    border-radius: 0 0 18px 18px !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    z-index: 1030;
+}
+
+/* ---- Brand logo area ---- */
+.brand-logo {
+    cursor: pointer;
+}
+
+/* ---- Language selector button ---- */
+.lang-btn {
+    font-size: 13px;
+    gap: 4px;
+}
+
+/* ---- Notification bell ---- */
+.notif-trigger {
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 8px;
+    transition: background 0.15s;
+}
+
+.notif-trigger:hover {
+    background: #f3f3f3;
+}
+
+/* ---- Notification dropdown ---- */
+.main-notif-dropdown {
+    width: 340px;
+}
+
+/* ---- Top menu nav links ---- */
+.header-menu .nav-link {
+    font-size: 13.5px;
+    letter-spacing: 0.01em;
+    border-radius: 8px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.header-menu .nav-link:hover {
+    background: #f3f3f3;
+    color: rgb(30, 41, 59) !important;
+}
+
+.header-menu .nav-link.active-menu {
+    color: rgb(30, 41, 59) !important;
+}
+
+/* ---- Dropdown menus ---- */
+.dropdown-hover:hover > .dropdown-menu,
+.dropdown-hover > .dropdown-toggle:focus + .dropdown-menu {
+    display: block;
+}
+
+.dropdown-item.transition-hover {
+    transition: background 0.15s, color 0.15s;
+    border-radius: 6px;
+}
+
+.dropdown-item.transition-hover:hover {
+    background: #fff5eb !important;
+    color: rgb(30, 41, 59) !important;
+}
+
+/* ---- User avatar ---- */
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    transition: box-shadow 0.2s;
+}
+
+.user-avatar:hover {
+    box-shadow: 0 2px 8px rgba(240, 138, 36, 0.3);
+}
+
+/* ---- Hover accent for utility icons ---- */
+.hover-accent {
+    color: #555;
+    transition: color 0.15s;
+}
+
+.hover-accent:hover {
+    color: rgb(30, 41, 59) !important;
+}
+
+/* ---- Utilities section ---- */
+.header-utilities {
+    gap: 4px;
+}
+
+/* ---- util-item spacing ---- */
+.util-item {
+    position: relative;
+}
+
+/* ---- Cursor helpers ---- */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+/* ============================================================
+   Sidebar / Profile offcanvas panel
+   ============================================================ */
+.sidebar-profile-panel {
+    width: 270px;
+    background-color: #f4f6f8;
+}
+
+/* ============================================================
+   ERP Sidebar tabs (used in sidebar card)
+   ============================================================ */
+.erp-sidebar-tab {
+    padding: 8px 10px;
+    color: #5b626a;
+    font-weight: 500;
+    border-radius: 8px;
+    background: transparent !important;
+    transition: all 0.2s ease;
+    font-size: 13px;
+    margin-bottom: 2px;
+}
+
+.erp-sidebar-tab i {
+    color: #5b626a;
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+}
+
+.erp-sidebar-tab:hover {
+    background-color: #f8f9fa !important;
+    color: #333;
+}
+
+.erp-sidebar-tab.active {
+    background-color: #ff9800 !important;
+    color: white !important;
+    font-weight: 700 !important;
+}
+
+.erp-sidebar-tab.active i {
+    color: white !important;
+}
+
+/* ============================================================
+   Main content wrapper (below navbar)
+   ============================================================ */
+.erp-content-wrapper {
+    display: flex;
+    height: calc(100vh - 66px);
+    overflow: hidden;
+}
+
+.erp-main-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* ============================================================
+   ERP Sidebar Navigation
+   ============================================================ */
+.app-left-sidebar {
+    background: #fff;
+    border-right: 1px solid rgba(0,0,0,0.07);
+}
+
+.sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sidebar-group-header {
+    font-size: 10px;
+    font-weight: 800;
+    color: #aaa;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    padding: 8px 10px 4px;
+}
+
+.sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a5568;
+    text-decoration: none !important;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.sidebar-nav-item:hover {
+    background: #fff5eb;
+    color: rgb(30, 41, 59);
+}
+
+.sidebar-nav-item:hover i {
+    color: rgb(30, 41, 59) !important;
+}
+
+.sidebar-nav-item.active {
+    background: #fff5eb;
+    color: rgb(30, 41, 59) !important;
+    font-weight: 700;
+}
+
+.sidebar-nav-item.active i {
+    color: rgb(30, 41, 59) !important;
+}
+
+.sidebar-nav-item-accent {
+    background: rgba(240,138,36,0.08);
+    color: rgb(30, 41, 59) !important;
+    font-weight: 700;
+}
+
+.sidebar-divider {
+    margin: 8px 0;
+    border-color: rgba(0,0,0,0.06);
+}
+
+/* Header active menu indicator */
+.menu-parent-link.active-menu {
+    background-color: rgba(240,138,36,0.08) !important;
+    color: rgb(30, 41, 59) !important;
+    font-weight: 700 !important;
+}
+

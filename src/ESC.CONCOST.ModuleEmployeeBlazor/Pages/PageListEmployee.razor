@@ -1,0 +1,207 @@
+@page "/employee/list"
+@attribute [Authorize]
+@inject IEmployeeService _svc
+@inject ISweetAlertService swal
+@inject ITextTranslator Text
+@inject Microsoft.JSInterop.IJSRuntime jSRuntime
+@using System.Data
+@using System.IO
+@using ESC.CONCOST.ModuleEmployeeCore
+@inject IBlazorContext BlazorContext
+@inject NavigationManager NavigationManager
+@using ESC.CONCOST.SharedComponents.Components
+
+<div class="erp-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="erp-page-title">
+            <i class="fa-solid fa-users-gear"></i>
+            @Text["인사 관리|Personnel Management"]
+        </h2>
+        <button class="erp-btn-add" @onclick="NewEmployee_Click">
+            <i class="fa-solid fa-user-plus"></i> @Text["직원 추가|Add Employee"]
+        </button>
+    </div>
+
+    <div class="erp-card mt-0">
+        <CustomTable DataSource="@_listEmployees" PageSize="20" WrapperClass="erp-table-premium border-0 shadow-none p-0" AllowFiltering="true">
+            <Columns>
+                <TableColumn TItem="EntityEmployee" Title="@Text["성명|Name"]">
+                    <Template>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="erp-avatar-circle">
+                                @(context.LastName?.FirstOrDefault())@(context.FirstName?.FirstOrDefault())
+                            </div>
+                            <div>
+                                <a href="javascript:void(0)" class="erp-link-name" @onclick="() => EditEmployee(context)">
+                                    @context.LastName @context.FirstName
+                                </a>
+                                <div class="erp-meta-info mt-1">@context.Email</div>
+                            </div>
+                        </div>
+                    </Template>
+                </TableColumn>
+
+                <TableColumn TItem="EntityEmployee" Title="@Text["연락처|Contact"]">
+                    <Template>
+                        <div class="erp-meta-info">
+                            <i class="fa-solid fa-phone small opacity-50"></i> @context.Phone
+                        </div>
+                    </Template>
+                </TableColumn>
+
+                <TableColumn TItem="EntityEmployee" Title="@Text["상태|Status"]">
+                    <Template>
+                        <span class="erp-badge-status bg-success-soft text-success">
+                            <i class="fa-solid fa-circle small"></i> @Text["재직중|Active"]
+                        </span>
+                    </Template>
+                </TableColumn>
+            </Columns>
+            <Actions>
+                <button class="btn btn-sm btn-light text-primary" style="border-radius: 8px;" @onclick="() => EditEmployee(context)">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </button>
+                <button class="btn btn-sm btn-light text-danger ms-1" style="border-radius: 8px;" @onclick="() => DeleteEmployee(context.Id)">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </Actions>
+        </CustomTable>
+    </div>
+</div>
+
+@* --- MODAL: THÊM/SỬA NHÂN SỰ (BOOTSTRAP 5 DIRECT) --- *@
+@if (_modalVisible)
+{
+    <div class="modal fade show d-block" style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 1050;" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0">
+                <div class="modal-header">
+                    <h5 class="modal-title">@_modalTitle</h5>
+                    <button type="button" class="btn-close" @onclick="() => _modalVisible = false"></button>
+                </div>
+                <EditForm Model="@_model" OnValidSubmit="@OnFormSubmit">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body">
+                        <div class="row g-4">
+                            @* Họ đệm *@
+                            <div class="col-md-6">
+                                <label class="form-label-bold">@Text["Họ đệm|Last Name"]</label>
+                                <InputText class="form-control-custom" placeholder="@Text["Họ và tên đệm|Enter last name"]" @bind-Value="_model.LastName" />
+                                <CustomValidationMessage For="@(() => _model.LastName)" />
+                            </div>
+
+                            @* Tên *@
+                            <div class="col-md-6">
+                                <label class="form-label-bold">@Text["Tên|First Name"]</label>
+                                <InputText class="form-control-custom" placeholder="@Text["Tên|Enter first name"]" @bind-Value="_model.FirstName" />
+                                <CustomValidationMessage For="@(() => _model.FirstName)" />
+                            </div>
+
+                            @* Email *@
+                            <div class="col-md-6">
+                                <label class="form-label-bold">@Text["Email|Email"]</label>
+                                <InputText class="form-control-custom" placeholder="example@company.com" @bind-Value="_model.Email" />
+                                <CustomValidationMessage For="@(() => _model.Email)" />
+                            </div>
+
+                            @* Điện thoại *@
+                            <div class="col-md-6">
+                                <label class="form-label-bold">@Text["Điện thoại|Phone"]</label>
+                                <InputText class="form-control-custom" placeholder="090..." @bind-Value="_model.Phone" />
+                                <CustomValidationMessage For="@(() => _model.Phone)" />
+                            </div>
+
+                            @* Giới tính *@
+                            <div class="col-md-6">
+                                <label class="form-label-bold">@Text["성별|Gender"]</label>
+                                <DropdownSelect TItem="OptionItem<string>" DataSource="@_optGender" @bind-Value="ModelGenderItem" Placeholder="@Text["성별 선택|Select gender"]" TextSelector="@(x => x.Text)" WrapperClass="w-100" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light fw-bold px-4" style="border-radius: 12px;" @onclick="() => _modalVisible = false">@Text["취소|Cancel"]</button>
+                        <button type="submit" class="erp-btn-add">@Text["저장|Save Changes"]</button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<EntityEmployee> _listEmployees = new();
+    private EntityEmployee _model = new();
+    private bool _modalVisible = false;
+    private string _modalTitle = "";
+
+    private List<OptionItem<string>> _optGender = new();
+
+    private OptionItem<string> ModelGenderItem { get => _optGender.FirstOrDefault(x => x.Value == _model.Gender) ?? new(); set => _model.Gender = value.Value; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _optGender = new List<OptionItem<string>> {
+            new OptionItem<string> { Value = "M", Text = Text["남성|Male"] },
+            new OptionItem<string> { Value = "F", Text = Text["여성|Female"] }
+        };
+        await RefreshData();
+    }
+
+    private async Task RefreshData()
+    {
+        var rsp = await _svc.GetList();
+        if (rsp.Success)
+        {
+            _listEmployees = rsp.Items.ToList();
+        }
+    }
+
+    private void NewEmployee_Click()
+    {
+        _model = new EntityEmployee();
+        _modalTitle = Text["직원 추가|Add New Employee"];
+        _modalVisible = true;
+    }
+
+    private void EditEmployee(EntityEmployee emp)
+    {
+        _model = emp;
+        _modalTitle = Text["직원 수정|Edit Employee"];
+        _modalVisible = true;
+    }
+
+    private async Task OnFormSubmit()
+    {
+        var rsp = await _svc.Save(_model);
+
+        if (rsp.Success)
+        {
+            _modalVisible = false;
+            await RefreshData();
+            _ = swal.Alert(Text["저장되었습니다.|Saved successfully."]);
+        }
+        else
+        {
+            _ = swal.Error(Text["저장에 실패했습니다.|Failed to save."]);
+        }
+    }
+
+    private async Task DeleteEmployee(int id)
+    {
+        var confirm = await swal.ConfirmDelete(Text["삭제하시겠습니까?|Are you sure you want to delete?"], Text["직원 삭제|Delete Employee"]);
+        if (!confirm) return;
+
+        var rsp = await _svc.Delete(id);
+        if (rsp.Success)
+        {
+            await RefreshData();
+            _ = swal.Alert(Text["삭제되었습니다.|Deleted successfully."]);
+        }
+    }
+
+    public class OptionItem<T>
+    {
+        public T Value { get; set; } = default!;
+        public string Text { get; set; } = "";
+    }
+}

@@ -1,0 +1,1 @@
+ffmpeg -ss 00:00:05.01 -i bg-0.mp4 -frames:v 1 poster-0.jpg

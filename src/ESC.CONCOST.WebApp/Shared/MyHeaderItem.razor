@@ -1,0 +1,7 @@
+﻿<li class="nav-item active">
+    <a class="nav-link" href="#" @onclick="@(_ => OnClickCallback?.Invoke())">@ChildContent</a>
+</li>
+@code{
+    [Parameter] public RenderFragment ChildContent { get; set; }
+    [Parameter] public System.Action OnClickCallback { get; set; }
+}

@@ -1,0 +1,8 @@
+﻿<EditForm Model="this" >
+
+    <AuthorizeView Context="_">
+        <NotAuthorized>
+           <RedirectToLogin />
+        </NotAuthorized>
+    </AuthorizeView>
+</EditForm>

@@ -1,0 +1,478 @@
+@typeparam TItem
+@attribute [CascadingTypeParameter(nameof(TItem))]
+@using System.Reflection
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components
+@implements IDisposable
+@inject ITextTranslator Text
+
+<CascadingValue Value="this">
+    @Columns
+</CascadingValue>
+
+<div class="erp-table-wrapper @WrapperClass">
+    @if (AllowFiltering)
+    {
+        <div class="erp-search-container @HeaderClass">
+            <div class="erp-search-group">
+                <i class="fas fa-search text-muted me-2"></i>
+                <div class="flex-grow-1">
+                    <input type="text"
+                           class="erp-search-input"
+                           placeholder="@SearchPlaceholder"
+                           @oninput="OnFilterTextChanged" />
+                </div>
+                <div class="ms-auto erp-pg-info d-none d-md-block">
+                    @Text["총:|Total:"] <strong>@_totalItems</strong> @Text["건|items"]
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="erp-table-container @TableContainerClass overflow-auto">
+        <table class="erp-table @TableClass">
+            <thead class="erp-table-header">
+                <tr>
+                    @foreach (var column in _displayColumns)
+                    {
+                        <th @onclick="() => SortByColumn(column.PropertyName)"
+                            class="@(AllowSorting && column.Sortable ? "cursor-pointer" : "") @column.HeaderClass"
+                            style="@column.HeaderStyle">
+                            <div class="d-flex align-items-center">
+                                <span>@column.DisplayName</span>
+                                @if (AllowSorting && column.Sortable && _sortColumn == column.PropertyName)
+                                {
+                                    <i class="fas fa-sort-@(_sortAscending ? "up" : "down") ms-1"></i>
+                                }
+                            </div>
+                        </th>
+                    }
+                    @if (Actions != null)
+                    {
+                        <th class="actions-header @ActionsHeaderClass" style="width: 80px;"></th>
+                    }
+                </tr>
+            </thead>
+            <tbody class="erp-list-body @RowClass">
+                @if (_pagedData != null && _pagedData.Any())
+                {
+                    @foreach (var item in _pagedData)
+                    {
+                        <tr class="erp-list-row">
+                            @foreach (var column in _displayColumns)
+                            {
+                                <td class="@column.CellClass" style="@column.CellStyle">
+                                    @if (column.Template != null)
+                                    {
+                                        @column.Template(item)
+                                    }
+                                    else
+                                    {
+                                        <div class="erp-title-text text-truncate">
+                                            @FormatValue(column.Property?.GetValue(item), column)
+                                        </div>
+                                    }
+                                </td>
+                            }
+                            @if (Actions != null)
+                            {
+                                <td class="actions-cell @ActionsCellClass" style="width:80px;">
+                                    <div style="display:flex;gap:4px;justify-content:flex-end;">
+                                        @Actions(item)
+                                    </div>
+                                </td>
+                            }
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="@(_displayColumns.Count + (Actions != null ? 1 : 0))">
+                            <div class="empty-state p-5 text-center w-100">
+                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                <p class="erp-title-text">@EmptyMessage</p>
+                                <p class="erp-meta-text">@EmptySubMessage</p>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (AllowPaging && _totalPages > 1)
+    {
+        <div class="erp-pg-container @FooterClass">
+            <div class="erp-pg-info">
+                @Text["표시|Showing"] <strong>@(_currentPage * PageSize - PageSize + 1)–@Math.Min(_currentPage * PageSize, _totalItems)</strong> / <strong>@_totalItems</strong> @Text["건|items"]
+            </div>
+            <div class="erp-pg-controls">
+                <button class="erp-pg-btn @(_currentPage == 1 ? "disabled" : "")" 
+                        @onclick="() => GoToPage(_currentPage - 1)" 
+                        disabled="@(_currentPage == 1)">
+                    <i class="fa-solid fa-angle-left erp-pg-arrow"></i>
+                </button>
+
+                @foreach (var pageNum in GetPageNumbers())
+                {
+                    @if (pageNum == -1)
+                    {
+                        <span class="erp-pg-btn disabled">...</span>
+                    }
+                    else
+                    {
+                        <button class="erp-pg-btn @(pageNum == _currentPage ? "active" : "")"
+                                @onclick="() => GoToPage(pageNum)">
+                            @pageNum
+                        </button>
+                    }
+                }
+
+                <button class="erp-pg-btn @(_currentPage == _totalPages ? "disabled" : "")" 
+                        @onclick="() => GoToPage(_currentPage + 1)" 
+                        disabled="@(_currentPage == _totalPages)">
+                    <i class="fa-solid fa-angle-right erp-pg-arrow"></i>
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+
+@code {
+    // Data Parameters
+    [Parameter] public IEnumerable<TItem>? DataSource { get; set; }
+    [Parameter] public RenderFragment<TItem>? Actions { get; set; }
+    [Parameter] public RenderFragment? Columns { get; set; }
+    // Pagination
+    [Parameter] public int PageSize { get; set; } = 50;
+    [Parameter] public int[] PageSizes { get; set; } = new[] { 10, 25, 50, 100 };
+    [Parameter] public bool AllowPaging { get; set; } = true;
+
+    // Features
+    [Parameter] public bool AllowFiltering { get; set; } = true;
+    [Parameter] public bool AllowSorting { get; set; } = true;
+
+    // Column Configuration (Legacy support)
+    [Parameter] public string[]? IncludeProperties { get; set; }
+
+    // CSS Classes
+    [Parameter] public string WrapperClass { get; set; } = "";
+    [Parameter] public string HeaderClass { get; set; } = "";
+    [Parameter] public string TableContainerClass { get; set; } = "";
+    [Parameter] public string TableClass { get; set; } = "";
+    [Parameter] public string RowClass { get; set; } = "";
+    [Parameter] public string FooterClass { get; set; } = "";
+    [Parameter] public string ActionsHeaderClass { get; set; } = "";
+    [Parameter] public string ActionsCellClass { get; set; } = "";
+
+    // Text Customization
+    [Parameter] public string? SearchPlaceholder { get; set; }
+    [Parameter] public string? EmptyMessage { get; set; }
+    [Parameter] public string? EmptySubMessage { get; set; }
+
+    // Internal State
+    private System.Timers.Timer? _debounceTimer;
+    private List<ColumnConfig> _columnDefinitions = new();
+    private List<ColumnConfig> _displayColumns = new();
+    private IEnumerable<TItem> _filteredData = new List<TItem>();
+    private IEnumerable<TItem> _pagedData = new List<TItem>();
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private int _totalItems = 0;
+    private string FilterText { get; set; } = "";
+    private string _lastFilterText = "";
+    private string _sortColumn = "";
+    private bool _sortAscending = true;
+
+    // Public API
+    public List<ColumnConfig> _Columns => _displayColumns;
+
+    public void AddColumn(ColumnConfig column)
+    {
+        if (!_columnDefinitions.Any(c => c.PropertyName == column.PropertyName && c.DisplayName == column.DisplayName))
+        {
+            _columnDefinitions.Add(column);
+            BuildColumns();
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        // Set bilingual defaults if not provided
+        SearchPlaceholder ??= Text["테이블에서 검색...|Search in table..."];
+        EmptyMessage ??= Text["데이터가 없습니다|No data available"];
+        EmptySubMessage ??= Text["필터를 변경하거나 검색해 보세요|Try changing filters or search terms"];
+    }
+
+    protected override void OnParametersSet()
+    {
+        BuildColumns();
+        _filteredData = DataSource ?? new List<TItem>();
+        ApplyFilter();
+    }
+
+    private void BuildColumns()
+    {
+        _displayColumns.Clear();
+
+        // Nếu có column definitions từ ChildContent
+        if (_columnDefinitions.Any())
+        {
+            var type = typeof(TItem);
+            foreach (var colDef in _columnDefinitions)
+            {
+                var prop = type.GetProperty(colDef.PropertyName);
+                if (prop != null)
+                {
+                    colDef.Property = prop;
+                    if (string.IsNullOrEmpty(colDef.DisplayName))
+                    {
+                        colDef.DisplayName = GetDisplayName(prop);
+                    }
+                    _displayColumns.Add(colDef);
+                }
+            }
+        }
+        // Fallback: Nếu không có column definitions, dùng IncludeProperties
+        else if (IncludeProperties != null && IncludeProperties.Any())
+        {
+            var type = typeof(TItem);
+            var allProperties = type.GetProperties().Where(p => p.CanRead && IsSimpleType(p.PropertyType));
+
+            var orderedProps = allProperties
+                .Where(p => IncludeProperties.Contains(p.Name))
+                .OrderBy(p => Array.IndexOf(IncludeProperties, p.Name))
+                .ToList();
+
+            foreach (var prop in orderedProps)
+            {
+                _displayColumns.Add(new ColumnConfig
+                {
+                    PropertyName = prop.Name,
+                    DisplayName = GetDisplayName(prop),
+                    Property = prop,
+                    Sortable = true,
+                    Visible = true
+                });
+            }
+        }
+        // Default: All properties
+        else
+        {
+            var type = typeof(TItem);
+            var allProperties = type.GetProperties().Where(p => p.CanRead && IsSimpleType(p.PropertyType));
+
+            foreach (var prop in allProperties)
+            {
+                _displayColumns.Add(new ColumnConfig
+                {
+                    PropertyName = prop.Name,
+                    DisplayName = GetDisplayName(prop),
+                    Property = prop,
+                    Sortable = true,
+                    Visible = true
+                });
+            }
+        }
+    }
+
+    private bool IsSimpleType(Type type)
+    {
+        return type.IsPrimitive
+            || type.IsEnum
+            || type == typeof(string)
+            || type == typeof(decimal)
+            || type == typeof(DateTime)
+            || type == typeof(DateTimeOffset)
+            || type == typeof(TimeSpan)
+            || type == typeof(Guid)
+            || Nullable.GetUnderlyingType(type) != null;
+    }
+
+    private string GetDisplayName(PropertyInfo prop)
+    {
+        var displayAttr = prop.GetCustomAttribute<DisplayAttribute>();
+        if (displayAttr != null && !string.IsNullOrEmpty(displayAttr.Name))
+            return displayAttr.Name;
+
+        return System.Text.RegularExpressions.Regex.Replace(prop.Name, "([a-z])([A-Z])", "$1 $2");
+    }
+
+    private string FormatValue(object? value, ColumnConfig column)
+    {
+        if (value == null) return "";
+
+        if (column.Formatter != null)
+            return column.Formatter(value);
+
+        if (value is DateTime dt)
+            return dt.ToString("dd/MM/yyyy");
+
+        if (value is bool b)
+            return b ? "✓" : "✗";
+
+        if (value is decimal || value is double || value is float)
+            return string.Format("{0:N0}", value);
+
+        return value.ToString() ?? "";
+    }
+
+    private void OnFilterTextChanged(ChangeEventArgs e)
+    {
+        FilterText = e.Value?.ToString() ?? "";
+
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Timers.Timer(400);
+        _debounceTimer.Elapsed += (s, args) =>
+        {
+            _debounceTimer.Stop();
+            _debounceTimer.Dispose();
+            _debounceTimer = null;
+            InvokeAsync(() => ApplyFilter());
+        };
+        _debounceTimer.Start();
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(FilterText))
+        {
+            _filteredData = DataSource ?? new List<TItem>();
+        }
+        else
+        {
+            var searchText = FilterText.ToLower().Trim();
+            _filteredData = (DataSource ?? new List<TItem>()).Where(item =>
+            {
+                foreach (var column in _displayColumns.Where(c => c.Visible))
+                {
+                    var value = column.Property?.GetValue(item)?.ToString()?.ToLower();
+                    if (value != null && value.Contains(searchText))
+                        return true;
+                }
+                return false;
+            }).ToList();
+        }
+
+        if (FilterText != _lastFilterText)
+        {
+            _currentPage = 1;
+            _lastFilterText = FilterText;
+        }
+
+        UpdatePagination();
+    }
+
+    private void SortByColumn(string propertyName)
+    {
+        var column = _displayColumns.FirstOrDefault(c => c.PropertyName == propertyName);
+        if (!AllowSorting || column == null || !column.Sortable) return;
+
+        if (_sortColumn == propertyName)
+        {
+            _sortAscending = !_sortAscending;
+        }
+        else
+        {
+            _sortColumn = propertyName;
+            _sortAscending = true;
+        }
+
+        _filteredData = _sortAscending
+            ? _filteredData.OrderBy(x => column.Property?.GetValue(x)).ToList()
+            : _filteredData.OrderByDescending(x => column.Property?.GetValue(x)).ToList();
+
+        UpdatePagination();
+    }
+
+    private void UpdatePagination()
+    {
+        _totalItems = _filteredData.Count();
+        _totalPages = _totalItems > 0 ? (int)Math.Ceiling(_totalItems / (double)PageSize) : 1;
+
+        if (_currentPage > _totalPages)
+            _currentPage = _totalPages > 0 ? _totalPages : 1;
+
+        _pagedData = _filteredData
+            .Skip((_currentPage - 1) * PageSize)
+            .Take(PageSize)
+            .ToList();
+
+        StateHasChanged();
+    }
+
+    private void GoToPage(int page)
+    {
+        if (page < 1 || page > _totalPages || page == _currentPage) return;
+        _currentPage = page;
+        UpdatePagination();
+    }
+
+    private void ChangePageSize(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newSize))
+        {
+            PageSize = newSize;
+            _currentPage = 1;
+            UpdatePagination();
+        }
+    }
+
+    private IEnumerable<int> GetPageNumbers()
+    {
+        var pages = new List<int>();
+        var maxPagesToShow = 5;
+        var halfRange = maxPagesToShow / 2;
+
+        var start = Math.Max(1, _currentPage - halfRange);
+        var end = Math.Min(_totalPages, _currentPage + halfRange);
+
+        if (_currentPage <= halfRange)
+            end = Math.Min(_totalPages, maxPagesToShow);
+        else if (_currentPage >= _totalPages - halfRange)
+            start = Math.Max(1, _totalPages - maxPagesToShow + 1);
+
+        if (start > 1)
+        {
+            pages.Add(1);
+            if (start > 2) pages.Add(-1);
+        }
+
+        for (int i = start; i <= end; i++)
+            pages.Add(i);
+
+        if (end < _totalPages)
+        {
+            if (end < _totalPages - 1) pages.Add(-1);
+            pages.Add(_totalPages);
+        }
+
+        return pages;
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Stop();
+        _debounceTimer?.Dispose();
+    }
+
+    public class ColumnConfig
+    {
+        public string PropertyName { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+        public PropertyInfo? Property { get; set; }
+        public bool Sortable { get; set; } = true;
+        public bool Visible { get; set; } = true;
+        public string HeaderClass { get; set; } = "";
+        public string HeaderStyle { get; set; } = "";
+        public string CellClass { get; set; } = "";
+        public string CellStyle { get; set; } = "";
+        public Func<object, string>? Formatter { get; set; }
+        public RenderFragment<TItem>? Template { get; set; }
+    }
+}

@@ -1,0 +1,26 @@
+﻿@* @code {
+
+    protected override void OnInitialized()
+    {
+        try
+        {
+            Navigation.NavigateTo($"login?returnUrl={Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri))}");
+        }
+        catch { }
+    }
+} *@
+@inject NavigationManager Navigation
+
+@code {
+    private bool _navigated;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_navigated)
+        {
+            _navigated = true;
+            var returnUrl = Uri.EscapeDataString("/" + Navigation.ToBaseRelativePath(Navigation.Uri));
+             Navigation.NavigateTo($"login?returnUrl={returnUrl}", true);
+        }
+    }
+}

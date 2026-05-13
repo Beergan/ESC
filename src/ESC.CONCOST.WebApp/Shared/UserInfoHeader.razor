@@ -1,0 +1,43 @@
+@inject IBlazorContext _ctx
+@inject IAuthService authSvc
+@inject ITextTranslator Text
+
+<li class="nav-item pl-1">
+    <a class="nav-link" href="javascript:void(0)" id="dropdownUser" data-toggle="dropdown"
+       aria-haspopup="true" aria-expanded="false">
+        <div style="background-color: rgb(212, 223, 231); border-radius: 50%; height: 30px; width: 30px; line-height: 28px;">
+            @if (_userModel.Avatar == null)
+            {
+                <i class="fas fa-user-alt"></i>
+            }
+            else
+            {
+                <img id="avatar1" style="width:100%" src="@_userModel.Avatar">
+            }
+        </div>
+    </a>
+    <div class="dropdown-menu dropdown-menu-right text-center" aria-labelledby="dropdownUser"
+         style="position: absolute;background-color: var(--background-content); border: 1px solid rgba(0,0,0,.15); width: 270px;">
+        @if (_userModel.Avatar == null)
+        {
+            <a href="nhan-su/ho-so/@_userModel.Guid"><i class="fas fa-user-alt pb-2" style="font-size: 70px; color: #ccc;"></i></a>
+        }
+        else
+        {
+            <a href="nhan-su/ho-so/@_userModel.Guid"><img id="avatar" style="width:100%" src="@_userModel.Avatar"></a>
+        }
+        <div>@Text[_userModel.FirstName + " " + _userModel.LastName, _userModel.LastName + " " + _userModel.FirstName]</div>
+        <div class="pb-2" style="color: var(--font-color);">@_userModel.UserName</div>
+        <a class="dropdown-item p-2" style="color: var(--font-color); border-top: 1px solid rgb(235, 240, 244);" href="/quan-tri/tai-khoan"><i class="fas fa-cog" style="color: #2AD360"></i>&nbsp;&nbsp;@Text["Account settings", "Thiết lập tài khoản"]</a>
+        <a class="dropdown-item pt-2 pb-0" style="color: var(--font-color); border-top: 1px solid rgb(235, 240, 244);" href="/logout"><i class="fas fa-sign-in-alt" style="color: red"> </i>&nbsp;&nbsp;@Text["Sign out", "Thoát"]</a>
+    </div>
+</li>
+
+@code{
+    private InfoUser _userModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userModel = await authSvc.ValidateTokenInCookie();
+    }
+}

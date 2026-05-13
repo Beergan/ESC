@@ -1,0 +1,130 @@
+@typeparam TValue
+
+<div class="form-select-wrapper">
+    <select class="form-control @CssClass" 
+            value="@GetStringValue(SelectedValue)" 
+            @onchange="@OnSelectChanged"
+            disabled="@Disabled"
+            @attributes="AdditionalAttributes">
+        @if (!string.IsNullOrWhiteSpace(Placeholder))
+        {
+            <option value="">@Placeholder</option>
+        }
+        @if (Items != null)
+        {
+            @foreach (var item in Items)
+            {
+                var itemValue = GetStringValue(item.Value);
+                var isSelected = IsSelected(item.Value);
+                <option value="@itemValue" selected="@isSelected">@item.Text</option>
+            }
+        }
+    </select>
+    @if (ShowValidation && ValidationMessage != null)
+    {
+        <div class="invalid-feedback d-block" style="color: red; font-size: 0.875rem; margin-top: 0.25rem;">
+            @ValidationMessage
+        </div>
+    }
+</div>
+
+@code {
+    public class SelectItem<T>
+    {
+        public T? Value { get; set; }
+        public string Text { get; set; } = string.Empty;
+    }
+
+    [Parameter] public TValue? SelectedValue { get; set; }
+    [Parameter] public EventCallback<TValue?> SelectedValueChanged { get; set; }
+    [Parameter] public List<SelectItem<TValue>>? Items { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? ValidationMessage { get; set; }
+    [Parameter] public bool ShowValidation { get; set; } = true;
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task OnSelectChanged(ChangeEventArgs e)
+    {
+        var stringValue = e.Value?.ToString();
+        TValue? newValue;
+        
+        if (string.IsNullOrEmpty(stringValue))
+        {
+            newValue = default(TValue);
+        }
+        else
+        {
+            newValue = ConvertValue(stringValue);
+        }
+
+        // Chỉ update nếu giá trị thay đổi
+        if (!Equals(SelectedValue, newValue))
+        {
+            SelectedValue = newValue;
+            if (SelectedValueChanged.HasDelegate)
+            {
+                await SelectedValueChanged.InvokeAsync(SelectedValue);
+            }
+        }
+    }
+
+    private TValue? ConvertValue(string stringValue)
+    {
+        if (string.IsNullOrEmpty(stringValue))
+            return default(TValue);
+
+        var type = typeof(TValue);
+        var underlyingType = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (underlyingType == typeof(int))
+        {
+            if (int.TryParse(stringValue, out var intVal))
+                return (TValue)(object)intVal;
+        }
+        else if (underlyingType == typeof(string))
+        {
+            return (TValue)(object)stringValue;
+        }
+        else if (underlyingType == typeof(Guid))
+        {
+            if (Guid.TryParse(stringValue, out var guidVal))
+                return (TValue)(object)guidVal;
+        }
+        else if (underlyingType == typeof(long))
+        {
+            if (long.TryParse(stringValue, out var longVal))
+                return (TValue)(object)longVal;
+        }
+
+        return default(TValue);
+    }
+
+    private string GetStringValue(TValue? value)
+    {
+        if (value == null)
+            return string.Empty;
+
+        return value switch
+        {
+            int intVal => intVal.ToString(),
+            long longVal => longVal.ToString(),
+            string strVal => strVal,
+            Guid guidVal => guidVal.ToString(),
+            _ => value.ToString() ?? string.Empty
+        };
+    }
+
+    private bool IsSelected(TValue? itemValue)
+    {
+        if (SelectedValue == null && itemValue == null)
+            return true;
+        
+        if (SelectedValue == null || itemValue == null)
+            return false;
+
+        return SelectedValue.Equals(itemValue);
+    }
+}
+

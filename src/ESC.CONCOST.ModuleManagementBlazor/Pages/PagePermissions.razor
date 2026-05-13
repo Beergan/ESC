@@ -1,0 +1,451 @@
+@page "/management/permission-group"
+@attribute [Authorize]
+@inject IManagementPermissionService _svc;
+@inject IServiceBase _svcBa;
+@inject ISweetAlertService swal
+@inject FieldExtractor<ModelRole> field
+@inject FieldExtractor<ModelPermissionsAccount> field1
+@inject ITextTranslator Text
+@using System.Diagnostics
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@using ESC.CONCOST.SharedComponents.Components
+
+<div class="erp-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="erp-page-title">
+            <i class="fa-solid fa-user-shield"></i>
+            @Text["권한 설정|Permission Settings"]
+        </h2>
+        <button class="btn btn-primary fw-bold px-4 py-2" style="border-radius: 12px;" @onclick="NewPermission_Click">
+            <i class="fa-solid fa-plus me-2"></i>@Text["새 그룹 추가|Add New Group"]
+        </button>
+    </div>
+
+    @if (_checkPermissionAdmin)
+    {
+        <div class="row g-4">
+            @* --- LEFT SIDEBAR: ROLE LIST --- *@
+            <div class="col-lg-3">
+                <div class="erp-sidebar-card">
+                    <h6 class="fw-bold mb-3 px-2" style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">
+                        @Text["권한 그룹 목록|Permission Groups"]
+                    </h6>
+                    <div class="role-list">
+                        @foreach (var item in _listRoles.EmptyIfNull())
+                        {
+                            <div class="erp-role-item @(_selectedRoleId == item.Id ? "active" : "")"
+                                 @onclick="() => GroupSelected(item.Id)">
+                                <span class="role-name">@item.Name</span>
+                                @if (item.Id != "fab4fac1-c546-41de-aebc-a14da6895711")
+                                {
+                                    <div class="d-flex gap-1" @onclick:stopPropagation="true">
+                                        <button class="btn btn-sm p-1 text-inherit opacity-50 hover-opacity-100" @onclick="() => ModifyRoles(item.Id)">
+                                            <i class="fa-solid fa-pen small"></i>
+                                        </button>
+                                        <button class="btn btn-sm p-1 text-inherit opacity-50 hover-opacity-100" @onclick="() => DeleteRoles(item.Id)">
+                                            <i class="fa-solid fa-trash small"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* --- RIGHT CONTENT: DETAILS --- *@
+            <div class="col-lg-9">
+                <div class="erp-card mt-0">
+                    <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                        <div class="d-flex align-items-center gap-3">
+                            <h4 class="fw-900 mb-0 text-navy">@_selectedRoleName</h4>
+                            <div class="d-flex bg-light p-1" style="border-radius: 14px;">
+                                <button class="erp-tab-pill @(_activeTab == 0 ? "active" : "")" @onclick="() => _activeTab = 0">
+                                    @Text["권한 설정|Permissions"]
+                                </button>
+                                <button class="erp-tab-pill @(_activeTab == 1 ? "active" : "")" @onclick="() => _activeTab = 1">
+                                    @Text["계정 목록|Accounts"]
+                                </button>
+                            </div>
+                        </div>
+                        @if (_activeTab == 0 && _selectedRoleId != "fab4fac1-c546-41de-aebc-a14da6895711")
+                        {
+                            <button class="erp-btn-update" @onclick="UpdatePermission_Click">
+                                <i class="fa-solid fa-cloud-arrow-up me-2"></i> @Text["변경사항 저장|Save Changes"]
+                            </button>
+                        }
+                    </div>
+
+                    <div class="tab-content">
+                        @if (_activeTab == 0)
+                        {
+                            <div class="permission-view">
+                                @if (!string.IsNullOrEmpty(_selectedRoleId))
+                                {
+                                    @for (int i = 0; i < _listPermissions.Count(); i++)
+                                    {
+                                        var idx = i;
+                                        var item = _listPermissions.ToArray()[idx];
+
+                                        <div class="erp-permission-box">
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <div class="erp-module-badge">@Text[item.Key.TextVi, item.Key.TextKo]</div>
+                                                @if (_selectedRoleId != "fab4fac1-c546-41de-aebc-a14da6895711")
+                                                {
+                                                    <button class="btn btn-sm btn-link text-decoration-none fw-bold p-0" style="font-size: 11px;" @onclick="@(() => ToggleSelectAll(item.Key.Name, idx))">
+                                                        @(index == idx ? Text["모두 선택 취소|Deselect All"] : Text["모두 선택|Select All"])
+                                                    </button>
+                                                }
+                                            </div>
+                                            
+                                            <div class="row g-3">
+                                                @foreach (var x in item.Value)
+                                                {
+                                                    if (_permission.ContainsKey(item.Key.Name))
+                                                    {
+                                                        var fdsfs = _permission[item.Key.Name];
+                                                        <div class="col-md-6 col-xl-4">
+                                                            <div class="form-check custom-check p-2 rounded-3 hover-bg-light transition-all">
+                                                                <input class="form-check-input" type="checkbox" id="@($"{item.Key.Name}_{x.Item1}")"
+                                                                       disabled=@(_selectedRoleId == "fab4fac1-c546-41de-aebc-a14da6895711")
+                                                                       @bind="fdsfs[x.Item1]">
+                                                                <label class="form-check-label fw-bold small text-dark ms-2 cursor-pointer" for="@($"{item.Key.Name}_{x.Item1}")">
+                                                                    @Text[x.Item2, x.Item3]
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="account-view">
+                                <div class="d-flex justify-content-between align-items-center mb-4">
+                                    <h6 class="fw-bold mb-0 text-muted">@Text["연결된 계정|Linked Accounts"]</h6>
+                                    @if (_selectedRoleId != "fab4fac1-c546-41de-aebc-a14da6895711")
+                                    {
+                                        <button class="btn btn-sm btn-primary fw-bold px-3" style="border-radius: 8px;" @onclick="NewAccount_Click">
+                                            <i class="fa-solid fa-plus me-1"></i> @Text["계정 추가|Add Account"]
+                                        </button>
+                                    }
+                                </div>
+                                <CustomTable DataSource="@_listRolesAccount" PageSize="20" WrapperClass="erp-table-premium border-0 shadow-none p-0">
+                                    <Columns>
+                                        <TableColumn TItem="ModelPermissionsAccount" Title="@Text["성명|Name"]">
+                                            <Template>
+                                                <div class="fw-bold text-navy">@Text[context.FirstName + " " + context.LastName, context.LastName + " " + context.FirstName]</div>
+                                            </Template>
+                                        </TableColumn>
+                                        <TableColumn TItem="ModelPermissionsAccount" Title="@Text["사용자 ID|User ID"]" Property="UserName">
+                                            <Template>
+                                                <span class="badge bg-light text-muted border">@context.UserName</span>
+                                            </Template>
+                                        </TableColumn>
+                                        <TableColumn TItem="ModelPermissionsAccount" Title="@Text["이메일|Email"]" Property="Email" />
+                                    </Columns>
+                                    <Actions>
+                                        @if (!(_selectedRoleId == "fab4fac1-c546-41de-aebc-a14da6895711" && context.UserName == "admin"))
+                                        {
+                                            <button class="btn btn-sm btn-light text-danger" style="border-radius: 8px;" @onclick="() => DeleteUserRole(context.UserId)">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        }
+                                    </Actions>
+                                </CustomTable>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="text-center py-5">
+            <i class="fa-solid fa-lock fs-1 text-muted opacity-20 mb-3"></i>
+            <h5 class="fw-bold">@Text["접근 권한이 없습니다!|Access Denied"]</h5>
+        </div>
+    }
+</div>
+
+@* Modal: Thêm/Sửa Nhóm *@
+<ModalComponent @ref="_modalRole" Title="@_modalTitle" OnConfirm="OnFormSubmit">
+    <EditForm Model="@_model" id="roleForm">
+        <DataAnnotationsValidator />
+        <div class="mb-3">
+            <label class="form-label-bold">@Text["그룹명|Group Name"] *</label>
+            <InputText class="form-control-custom" @bind-Value="_model.Name" placeholder="@Text["그룹명 입력...|Enter group name..."]" />
+            <CustomValidationMessage For="@(() => _model.Name)" />
+        </div>
+    </EditForm>
+</ModalComponent>
+
+@* Modal: Thêm tài khoản vào nhóm *@
+<ModalComponent @ref="_modalAddUser" Title="@_modalTitle" OnConfirm="OnFormSubmitAddUser" Size="ModalComponent.ModalSize.Large">
+    <div class="mb-3 position-relative">
+        <input type="text" class="form-control-custom ps-5" placeholder="@Text["계정 검색...|Search accounts..."]" @bind="_searchUser" @bind:event="oninput" />
+        <i class="fa-solid fa-magnifying-glass position-absolute top-50 translate-middle-y ms-3 text-muted" style="left: 0;"></i>
+    </div>
+
+    <div class="table-responsive" style="max-height: 400px;">
+        <table class="table table-hover align-middle">
+            <thead class="bg-light">
+                <tr>
+                    <th width="40" class="text-center">
+                        <input type="checkbox" class="form-check-input" @onchange="ToggleSelectAllUsers" />
+                    </th>
+                    <th>@Text["성명|Name"]</th>
+                    <th>@Text["사용자 ID|User ID"]</th>
+                    <th>@Text["이메일|Email"]</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in _listRolesActive.EmptyIfNull().Where(x => string.IsNullOrEmpty(_searchUser) || (x.FirstName + x.LastName + x.UserName).Contains(_searchUser, StringComparison.OrdinalIgnoreCase)))
+                {
+                    <tr>
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input" @onchange="(e) => ToggleUserSelection(u.UserId, e)" checked="@_selectedUserIds.Contains(u.UserId)" />
+                        </td>
+                        <td class="fw-bold">@Text[u.FirstName + " " + u.LastName, u.LastName + " " + u.FirstName]</td>
+                        <td><span class="badge bg-light text-dark">@u.UserName</span></td>
+                        <td class="small">@u.Email</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</ModalComponent>
+
+@code {
+    private ModelRole _model = new();
+    private Dictionary<string, MyDictionary<long, bool>> _permission = new();
+    private string _modalTitle;
+    private long index = -1;
+    private ModalComponent _modalRole = default!;
+    private ModalComponent _modalAddUser = default!;
+    private bool _checkPermissionAdmin;
+    private string _selectedRoleId;
+    private string _selectedRoleName;
+    private List<KeyValuePair<FeatureModel, Tuple<long, string, string>[]>> _listPermissions = new();
+    private IEnumerable<ModelRole> _listRoles;
+    private List<ModelPermissionsAccount> _listRolesAccount;
+    private List<ModelPermissionsAccount> _listRolesActive;
+
+    private int _activeTab = 0;
+    private string _searchUser = "";
+    private HashSet<string> _selectedUserIds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _checkPermissionAdmin = await _svc.CheckPermissionAdmin();
+
+        if (_checkPermissionAdmin)
+        {
+            _listPermissions = await _svcBa.GetListPermissions();
+            _selectedRoleId = NavigationManager.Uri.GetAfter("#");
+            await RereshData();
+        }
+    }
+
+    private async Task OnFormSubmit()
+    {
+        var rsp = await AppStatic.CallApi(() => _svc.CreateNewRole(_model));
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+        await _modalRole.Close();
+        await RereshData();
+    }
+
+    private async Task OnFormSubmitAddUser()
+    {
+        var rsp = await AppStatic.CallApi(() => _svc.CreateListUserRole(_selectedRoleId, _selectedUserIds.ToArray()));
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+        await _modalAddUser.Close();
+        await RereshData();
+    }
+
+    private void NewAccount_Click()
+    {
+        _modalTitle = Text["계정 추가|Add Account"];
+        _searchUser = "";
+        _selectedUserIds.Clear();
+        _modalAddUser.Show();
+    }
+
+    private void NewPermission_Click()
+    {
+        _modalTitle = Text["권한 그룹 추가|Add Permission Group"];
+        _model = new();
+        _modalRole.Show();
+    }
+
+    private async Task UpdatePermission_Click()
+    {
+        var rsp = await _svc.UpdateRoleClaims(_selectedRoleId, Convert(_permission));
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+        await RereshData();
+        _ = swal.Alert(Text["권한 설정이 저장되었습니다.|Permissions updated successfully."]);
+    }
+
+    private async Task RereshData()
+    {
+        var rsp = await AppStatic.CallApi(() => _svc.GetListRoles());
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+
+        _listRoles = rsp.Items;
+
+        if (_listRoles != null && _listRoles.Any())
+        {
+            var check = _listRoles.FirstOrDefault(x => x.Id == _selectedRoleId);
+            if (check == null)
+                GroupSelected(_listRoles.ElementAt(0).Id);
+            else
+                GroupSelected(_selectedRoleId);
+        }
+
+        StateHasChanged();
+    }
+
+    private async void GroupSelected(string roleId)
+    {
+        var currentUri = NavigationManager.Uri.GetBefore("#");
+        await JSRuntime.InvokeVoidAsync("update_url", currentUri + "#" + roleId);
+
+        _selectedRoleId = roleId;
+        var role = _listRoles.SingleOrDefault(x => x.Id == roleId);
+        if (role != null)
+        {
+            _selectedRoleName = role.Name;
+        }
+
+        var lstRoleClaims = await _svc.GetListRoleClaims(roleId);
+        _permission.Clear();
+
+        foreach (var item in _listPermissions)
+        {
+            long xxx = 0;
+            if (lstRoleClaims.ContainsKey(item.Key.Name))
+            {
+                xxx = lstRoleClaims[item.Key.Name];
+            }
+
+            var modulePermission = new MyDictionary<long, bool>();
+
+            foreach (var funcPermission in item.Value)
+            {
+                modulePermission.Add(funcPermission.Item1, (xxx & funcPermission.Item1) == funcPermission.Item1);
+            }
+
+            _permission.Add(item.Key.Name, modulePermission);
+        }
+
+        _listRolesAccount = await _svc.GetListRoleAccount(roleId);
+        _listRolesActive = await _svc.GetListUserActive(roleId);
+
+        StateHasChanged();
+    }
+
+    private Dictionary<string, long> Convert(Dictionary<string, MyDictionary<long, bool>> xxx)
+    {
+        return xxx.ToDictionary(x => x.Key, x => x.Value.Dict.Where(y => y.Value == true).Sum(z => z.Key));
+    }
+
+    private void ToggleSelectAll(string key, long i)
+    {
+        if (index == i) DeSelectAll(key);
+        else SelectAll(key, i);
+    }
+
+    private void SelectAll(string key, long i)
+    {
+        if (_permission.ContainsKey(key))
+        {
+            var dict = _permission[key];
+            foreach (var k in dict.Dict.Keys.ToList()) dict[k] = true;
+            index = i;
+        }
+    }
+
+    private void DeSelectAll(string key)
+    {
+        if (_permission.ContainsKey(key))
+        {
+            var dict = _permission[key];
+            foreach (var k in dict.Dict.Keys.ToList()) dict[k] = false;
+            index = -1;
+        }
+    }
+
+    private void ModifyRoles(string id)
+    {
+        var item = _listRoles.Single(x => x.Id == id);
+        _model.Id = id;
+        _model.Name = item.Name;
+        _modalTitle = Text["권한 그룹 수정|Edit Permission Group"];
+        _modalRole.Show();
+    }
+
+    private async Task DeleteRoles(string id)
+    {
+        var confirm = await swal.ConfirmDelete(Text["이 권한 그룹을 삭제하시겠습니까?|Delete this permission group?"], Text["삭제 확인|Delete Confirmation"]);
+        if (!confirm) return;
+
+        var rsp = await AppStatic.CallApi(() => _svc.DeleteRoles(id));
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+        await RereshData();
+    }
+
+    private async Task DeleteUserRole(string userId)
+    {
+        var confirm = await swal.ConfirmDelete(Text["이 계정을 그룹에서 삭제하시겠습니까?|Remove this account from group?"], Text["삭제 확인|Delete Confirmation"]);
+        if (!confirm) return;
+
+        var rsp = await AppStatic.CallApi(() => _svc.DeleteUserRole(_selectedRoleId, userId));
+        if (!rsp.Success)
+        {
+            _ = swal.Error(rsp.Message);
+            return;
+        }
+        await RereshData();
+    }
+
+    private void ToggleUserSelection(string userId, ChangeEventArgs e)
+    {
+        if ((bool)e.Value) _selectedUserIds.Add(userId);
+        else _selectedUserIds.Remove(userId);
+    }
+
+    private void ToggleSelectAllUsers(ChangeEventArgs e)
+    {
+        if ((bool)e.Value)
+        {
+            foreach (var u in _listRolesActive) _selectedUserIds.Add(u.UserId);
+        }
+        else _selectedUserIds.Clear();
+    }
+}

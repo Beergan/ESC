@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>annotations</Nullable>
+		<DebugType>embedded</DebugType>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<NoWarn>1591;1998;BL0005;</NoWarn>
+	</PropertyGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\ESC.CONCOST.Abstract\ESC.CONCOST.Abstract.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Folder Include="Entities\" />
+	  <Folder Include="Interfaces\" />
+	</ItemGroup>
+</Project>

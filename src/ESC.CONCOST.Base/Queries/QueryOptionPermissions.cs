@@ -1,0 +1,10 @@
+using System;
+using System.Collections.Generic;
+using MediatR;
+using ESC.CONCOST.Abstract;
+
+namespace ESC.CONCOST.Base;
+
+public class QueryOptionPermissions : IRequest<List<OptionItem<Guid>>>
+{
+}

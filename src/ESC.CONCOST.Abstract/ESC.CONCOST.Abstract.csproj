@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>annotations</Nullable>
+		<DebugType>embedded</DebugType>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
+		<NoWarn>1591;1998;BL0005;</NoWarn>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Http.Features" Version="5.0.17" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+		<PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.10" />
+		<PackageReference Include="RestEase" Version="1.6.4" />
+		<PackageReference Include="RestEase.HttpClientFactory" Version="1.6.4" />
+		<PackageReference Include="MudBlazor" Version="7.13.0" />
+		<PackageReference Include="MudBlazor.ThemeManager" Version="2.1.0" />
+
+		<PackageReference Include="Markdig" Version="0.37.0" />
+		<PackageReference Include="System.Text.Json" Version="8.0.5" />
+	</ItemGroup>
+</Project>

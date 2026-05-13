@@ -1,0 +1,41 @@
+@typeparam TItem
+@using Microsoft.AspNetCore.Components
+
+@code {
+    [CascadingParameter] public CustomTable<TItem>? Table { get; set; }
+
+    [Parameter] public string Property { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public bool Sortable { get; set; } = true;
+    [Parameter] public bool Visible { get; set; } = true;
+
+    [Parameter] public string HeaderClass { get; set; } = "";
+    [Parameter] public string HeaderStyle { get; set; } = "";
+    [Parameter] public string CellClass { get; set; } = "";
+    [Parameter] public string CellStyle { get; set; } = "";
+
+    [Parameter] public Func<object, string>? Format { get; set; }
+    [Parameter] public RenderFragment<TItem>? Template { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Table == null)
+            throw new InvalidOperationException("TableColumn must be used inside CustomTable");
+
+        var column = new CustomTable<TItem>.ColumnConfig
+        {
+            PropertyName = Property,
+            DisplayName = Title,
+            Sortable = Sortable,
+            Visible = Visible,
+            HeaderClass = HeaderClass,
+            HeaderStyle = HeaderStyle,
+            CellClass = CellClass,
+            CellStyle = CellStyle,
+            Formatter = Format,
+            Template = Template
+        };
+
+        Table.AddColumn(column);
+    }
+}

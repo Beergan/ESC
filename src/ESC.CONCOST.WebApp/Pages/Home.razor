@@ -1,0 +1,320 @@
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject NavigationManager Navigation
+@inject ITextTranslator Text
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Dashboard - HRM System</PageTitle>
+
+<style>
+    :root {
+        --erp-orange: rgb(30, 41, 59);
+        --erp-bg: #f4f7f6;
+        --erp-card-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    }
+
+    .dashboard-wrapper {
+        background-color: var(--erp-bg);
+        padding: 24px;
+    }
+
+    .section-title {
+        font-weight: 800;
+        color: #333;
+        font-size: 1.1rem;
+    }
+
+    /* Cards */
+    .dashboard-card {
+        background: #fff;
+        border: none;
+        border-radius: 20px;
+        box-shadow: var(--erp-card-shadow);
+        transition: transform 0.2s;
+    }
+
+    /* Sidebar Components */
+    .profile-card {
+        padding: 30px 20px;
+        text-align: center;
+    }
+
+    .avatar-placeholder {
+        width: 80px;
+        height: 80px;
+        background: #f8f9fa;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 15px;
+        color: #adb5bd;
+    }
+
+    .profile-info-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 12px;
+        font-size: 12px;
+        text-align: left;
+    }
+
+    .profile-label {
+        color: #888;
+        min-width: 70px;
+        font-weight: 600;
+    }
+
+    .profile-value {
+        color: #333;
+        font-weight: 700;
+        margin-left: 10px;
+    }
+
+    .role-badge {
+        background: rgba(240, 138, 36, 0.1);
+        color: var(--erp-orange);
+        padding: 4px 12px;
+        border-radius: 8px;
+        font-weight: 800;
+    }
+
+    .bday-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        margin-top: 15px;
+    }
+
+    .bday-item {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 10px 5px;
+        text-align: center;
+        border: 1px solid #eee;
+    }
+
+    .bday-name {
+        font-weight: 800;
+        font-size: 11px;
+        display: block;
+        margin-top: 5px;
+    }
+
+    .bday-date {
+        color: #888;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    /* Gantt / Projects */
+    .gantt-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 10px;
+    }
+
+    .gantt-header-cell {
+        color: #888;
+        font-weight: 700;
+        font-size: 11px;
+        padding-bottom: 10px;
+        text-align: center;
+    }
+
+    .gantt-row {
+        background: #fff;
+    }
+
+    .gantt-name-cell {
+        font-weight: 800;
+        font-size: 12px;
+        color: #333;
+        padding: 15px 0;
+        width: 150px;
+    }
+
+    .gantt-timeline-cell {
+        position: relative;
+        border-left: 1px solid #f0f0f0;
+        min-width: 60px;
+    }
+
+    .gantt-bar {
+        position: absolute;
+        height: 32px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: var(--erp-orange);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        padding: 0 15px;
+        color: #fff;
+        font-weight: 800;
+        font-size: 10px;
+        box-shadow: 0 4px 10px rgba(240, 138, 36, 0.3);
+        z-index: 2;
+    }
+
+    /* Lists & Tables */
+    .erp-list-item {
+        border: none;
+        border-bottom: 1px solid #f8f8f8;
+        padding: 15px 0;
+    }
+
+    .erp-list-item:last-child {
+        border-bottom: none;
+    }
+
+    .badge-tag {
+        padding: 5px 12px;
+        border-radius: 6px;
+        font-weight: 800;
+        font-size: 10px;
+    }
+
+    .tag-notice { background: rgba(13, 110, 253, 0.1); color: #0d6efd; }
+    .tag-hr { background: rgba(25, 135, 84, 0.1); color: #198754; }
+    .tag-project { background: rgba(13, 202, 240, 0.1); color: #0dcaf0; }
+    .tag-minutes { background: rgba(108, 117, 125, 0.1); color: #6c757d; }
+    .tag-manual { background: rgba(111, 66, 193, 0.1); color: #6f42c1; }
+
+    /* Chart Overlays */
+    .chart-center-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+    }
+
+    .chart-center-value {
+        font-size: 28px;
+        font-weight: 800;
+        color: #333;
+        display: block;
+        line-height: 1;
+    }
+
+    .chart-center-label {
+        font-size: 10px;
+        color: #888;
+        font-weight: 700;
+    }
+</style>
+
+
+    <div class="row g-4">
+        @* ==========================================
+           WELCOME & QUICK STATS
+           ========================================== *@
+        <div class="col-12">
+            <div class="dashboard-card p-5 text-center bg-white">
+                <div class="mb-4">
+                    <img src="/assets/images/logo-mains.png" alt="Logo" style="height: 60px;" />
+                </div>
+                <h2 class="fw-bold text-dark mb-2">@Text["Chào mừng đến với ESC CONCOST|ESC CONCOST에 오신 것을 환영합니다"]</h2>
+                <p class="text-muted mb-4">@Text["Hệ thống tính toán điều chỉnh số tiền hợp đồng do biến động giá (Escalation).|물가변동으로 인한 계약금액 조정(Escalation) 계산 시스템입니다."]</p>
+                
+                <div class="d-flex justify-content-center gap-3">
+                    <button class="btn btn-primary px-4 py-2 rounded-pill fw-bold" @onclick='() => Navigation.NavigateTo("/escalation/workspace")'>
+                        <i class="fa-solid fa-calculator me-2"></i> @Text["Bắt đầu tính toán|계산 시작하기"]
+                    </button>
+                    <button class="btn btn-outline-secondary px-4 py-2 rounded-pill fw-bold" @onclick='() => Navigation.NavigateTo("/employee/list")'>
+                        <i class="fa-solid fa-users me-2"></i> @Text["Quản lý nhân sự|인사 관리"]
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        @* ESC WORKSPACE OVERVIEW *@
+        <div class="col-xl-8 col-lg-12">
+            <div class="dashboard-card p-4 h-100">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h6 class="section-title mb-0">@Text["Dự án ESC gần đây|최근 ESC 프로젝트"]</h6>
+                    <a href="/escalation/workspace" class="btn btn-link btn-sm fw-bold text-decoration-none">@Text["Xem tất cả|Toàn bộ 보기"]</a>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 13px;">
+                        <thead class="bg-light">
+                            <tr class="text-muted" style="font-size: 11px; font-weight: 800; text-transform: uppercase;">
+                                <th class="ps-4 py-3">@Text["Tên Dự án|프로젝트명"]</th>
+                                <th class="py-3">@Text["Ngày cơ sở|기준일"]</th>
+                                <th class="py-3">@Text["Ngày điều chỉnh|조정일"]</th>
+                                <th class="py-3">@Text["Trạng thái|상태"]</th>
+                                <th class="py-3 pe-4 text-end">@Text["Hành động|작업"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="ps-4 fw-bold text-dark">Dự án Mẫu ESC 01</td>
+                                <td>2025-01-01</td>
+                                <td>2025-04-01</td>
+                                <td><span class="badge bg-success-subtle text-success px-2 py-1 rounded">@Text["Hoàn thành|완료"]</span></td>
+                                <td class="pe-4 text-end">
+                                    <button class="btn btn-sm btn-light text-primary"><i class="fa-solid fa-eye"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="ps-4 fw-bold text-dark">Dự án Mẫu ESC 02</td>
+                                <td>2025-02-15</td>
+                                <td>2025-05-15</td>
+                                <td><span class="badge bg-warning-subtle text-warning px-2 py-1 rounded">@Text["Đang tính toán|계산 중"]</span></td>
+                                <td class="pe-4 text-end">
+                                    <button class="btn btn-sm btn-light text-primary"><i class="fa-solid fa-pen-to-square"></i></button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        @* SYSTEM INFO *@
+        <div class="col-xl-4 col-lg-12">
+            <div class="dashboard-card p-4 h-100">
+                <h6 class="section-title mb-4">@Text["Thông tin hệ thống|시스템 정보"]</h6>
+                
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small fw-bold text-muted">@Text["Phiên bản|버전"]</span>
+                        <span class="small fw-bold text-dark">v2.0.0 (ESC Core)</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small fw-bold text-muted">@Text["Cơ sở dữ liệu|데이터베이스"]</span>
+                        <span class="small fw-bold text-success">Connected</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="small fw-bold text-muted">@Text["Môi trường|환경"]</span>
+                        <span class="small fw-bold text-primary">Production Ready</span>
+                    </div>
+                </div>
+
+                <div class="alert alert-info border-0 rounded-4 p-3 mb-0">
+                    <div class="d-flex gap-3">
+                        <i class="fa-solid fa-circle-info fs-4 mt-1"></i>
+                        <div>
+                            <h6 class="fw-bold mb-1" style="font-size: 13px;">@Text["Lưu ý|Lưu ý"]</h6>
+                            <p class="small mb-0 opacity-75">@Text["Hệ thống đã được tinh gọn để tập trung vào nghiệp vụ ESC.|ESC 업무에 집중할 수 있도록 시스템이 최적화되었습니다."]</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Future dashboard chart initialization
+        }
+    }
+}
+

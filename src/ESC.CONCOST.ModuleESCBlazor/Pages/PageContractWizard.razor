@@ -1,0 +1,1155 @@
+@page "/escalation/create"
+@using System.Globalization
+@attribute [Authorize]
+
+@inject NavigationManager Navigation
+@inject ITextTranslator Text
+@inject IESCService ESCService
+@inject IConstructionCategoryService CategoryService
+@inject IContractCategoryService ContractCategoryService
+@inject ISweetAlertService Alert
+@inject IJSRuntime JSRuntime
+
+<div class="wizard-container">
+    <div class="wizard-header">
+        <h2>
+            <i class="fa-solid fa-bolt wizard-title-icon"></i>
+            @Text["물가변동 조정 관리|Create ESC Project"]
+        </h2>
+        <p>
+            @Text["ESC 물가변동 계약금액 조정 관리 시스템|ESC Contract Price Adjustment Management System"]
+        </p>
+    </div>
+
+    <div class="stepper">
+        <div class="@GetStepClass(1)">
+            <div class="step-circle">
+                @if (CurrentStep > 1)
+                {
+                    <i class="fa-solid fa-check"></i>
+                }
+                else
+                {
+                    <span>1</span>
+                }
+            </div>
+            <div class="step-label">@Text["공사 기본정보|Basic Info"]</div>
+        </div>
+
+        <div class="@GetStepClass(2)">
+            <div class="step-circle">
+                @if (CurrentStep > 2)
+                {
+                    <i class="fa-solid fa-check"></i>
+                }
+                else
+                {
+                    <span>2</span>
+                }
+            </div>
+            <div class="step-label">@Text["계약 금액·일정|Amount & Schedule"]</div>
+        </div>
+
+        <div class="@GetStepClass(3)">
+            <div class="step-circle">
+                <span>3</span>
+            </div>
+            <div class="step-label">@Text["ESC 조정 설정|ESC Settings"]</div>
+        </div>
+    </div>
+
+    <EditForm Model="@Model" OnValidSubmit="HandleValidSubmit">
+        <DataAnnotationsValidator />
+
+        <div class="wizard-card">
+            @if (IsBusy)
+            {
+                <div class="loading-overlay">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            }
+
+            @if (CurrentStep == 1)
+            {
+                <div class="step-content">
+                    <div class="step-title-badge">
+                        STEP 1. @Text["공사 기본정보|Basic Information"]
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">
+                            @Text["공사명|Project Name"] <span class="required">*</span>
+                        </label>
+
+                        <InputText @bind-Value="Model.ProjectName"
+                                   class="form-control-custom"
+                                   placeholder="@Text["예: 조천정수장 고도정수처리시설 전기공사|Ex: Project Name"]" />
+
+                        <ValidationMessage For="@(() => Model.ProjectName)" class="validation-message" />
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["시공사명|Contractor"] <span class="required">*</span>
+                            </label>
+
+                            <InputText @bind-Value="Model.Contractor"
+                                       class="form-control-custom" />
+
+                            <ValidationMessage For="@(() => Model.Contractor)" class="validation-message" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["발주처명|Client"] <span class="required">*</span>
+                            </label>
+
+                            <InputText @bind-Value="Model.Client"
+                                       class="form-control-custom" />
+
+                            <ValidationMessage For="@(() => Model.Client)" class="validation-message" />
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["공사 종류|Work Type"] <span class="required">*</span>
+                            </label>
+
+                            <DropdownSelect TItem="ConstructionCategory"
+                                            DataSource="@ActiveCategories"
+                                            Value="@SelectedCategory"
+                                            ValueChanged="OnCategoryChanged"
+                                            TextSelector="@(x => Text.IsKorean ? x.Name : x.NameEn)"
+                                            Placeholder="@Text["공종 선택|Select Work Type"]"
+                                            IconClass="fa-solid fa-hard-hat"
+                                            WrapperClass="w-100" />
+
+                            <ValidationMessage For="@(() => Model.WorkType)" class="validation-message" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["계약방법|Contract Method"] <span class="required">*</span>
+                            </label>
+
+                            <DropdownSelect TItem="ContractCategory"
+                                            DataSource="@ActiveContracts"
+                                            Value="@SelectedContract"
+                                            ValueChanged="OnContractChanged"
+                                            TextSelector="@(x => Text.IsKorean ? x.Name : x.NameEn)"
+                                            Placeholder="@Text["계약방법 선택|Select Contract Method"]"
+                                            IconClass="fa-solid fa-file-contract"
+                                            WrapperClass="w-100" />
+
+                            <ValidationMessage For="@(() => Model.ContractMethod)" class="validation-message" />
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["낙찰율(%)|Bid Rate(%)"] <span class="required">*</span>
+                            </label>
+
+                            <InputNumber @bind-Value="Model.BidRate"
+                                         class="form-control-custom" />
+
+                            <ValidationMessage For="@(() => Model.BidRate)" class="validation-message" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["작성기관|Prepared By"]
+                            </label>
+
+                            <InputText @bind-Value="Model.PreparedBy"
+                                       class="form-control-custom" />
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 24px; padding-top: 24px; border-top: 1px dashed var(--border-color);">
+                        <label class="form-label">
+                            <i class="fa-solid fa-file-arrow-up" style="color: var(--secondary-color); margin-right: 6px;"></i>
+                            @Text["샘플 데이터 첨부 (PDF, Excel)|Attach Sample Data (PDF, Excel)"]
+                        </label>
+                        <p style="font-size: 12px; color: #64748b; margin-bottom: 16px;">
+                            @Text["고객이 제공한 샘플 데이터(PDF, Excel)를 업로드하거나 입력 양식을 다운로드할 수 있습니다.|You can upload sample data (PDF, Excel) provided by the customer or download input templates."]
+                        </p>
+
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <div style="position: relative; display: inline-block;">
+                                <button type="button" class="btn-action" style="padding: 10px 20px; background: white; border: 2px dashed var(--border-color); color: var(--primary-color); font-weight: 700; display: flex; align-items: center; gap: 8px;">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i> @Text["파일 선택|Choose File"]
+                                </button>
+                                <InputFile OnChange="OnSampleFilesChanged" multiple accept=".pdf,.xls,.xlsx" style="position: absolute; top: 0; left: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;" />
+                            </div>
+
+                            <button type="button" class="btn-action" style="padding: 10px 20px; background: #107c41; color: white; border: none; font-weight: 700; display: flex; align-items: center; gap: 8px;" @onclick="DownloadExcelTemplate" @onclick:preventDefault="true">
+                                <i class="fa-solid fa-file-excel"></i> @Text["Excel 양식|Excel Template"]
+                            </button>
+                            
+                            <button type="button" class="btn-action" style="padding: 10px 20px; background: #e3242b; color: white; border: none; font-weight: 700; display: flex; align-items: center; gap: 8px;" @onclick="DownloadPdfTemplate" @onclick:preventDefault="true">
+                                <i class="fa-solid fa-file-pdf"></i> @Text["PDF 양식|PDF Template"]
+                            </button>
+                        </div>
+
+                        @if (UploadedSampleFiles != null && UploadedSampleFiles.Any())
+                        {
+                            <div style="margin-top: 16px; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
+                                <h6 style="font-size: 13px; font-weight: 800; margin-bottom: 12px; color: #334155;">
+                                    @Text["업로드된 파일|Uploaded Files"] (@UploadedSampleFiles.Count)
+                                </h6>
+                                <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+                                    @foreach (var file in UploadedSampleFiles)
+                                    {
+                                        <li style="font-size: 13px; color: var(--text-color); display: flex; align-items: center; gap: 10px; background: white; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                            <i class="fa-solid @(file.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ? "fa-file-pdf text-danger" : "fa-file-excel text-success")" style="font-size: 16px;"></i>
+                                            <span style="flex: 1; font-weight: 600;">@file.Name</span>
+                                            <span style="color: #94a3b8; font-size: 12px;">(@(file.Size / 1024) KB)</span>
+                                            <button type="button" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px;" @onclick="() => RemoveSampleFile(file)">
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (CurrentStep == 2)
+            {
+                <div class="step-content">
+                    <div class="step-title-badge">
+                        STEP 2. @Text["계약 금액·일정|Amount & Schedule"]
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">
+                            @Text["계약금액(원)|Contract Amount"] <span class="required">*</span>
+                        </label>
+
+                        <InputNumber @bind-Value="Model.ContractAmount"
+                                     class="form-control-custom" />
+
+                        <ValidationMessage For="@(() => Model.ContractAmount)" class="validation-message" />
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["선금액|Advance Payment"]
+                            </label>
+
+                            <InputNumber @bind-Value="Model.AdvanceAmt"
+                                         class="form-control-custom" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["계약체결일|Contract Date"] <span class="required">*</span>
+                            </label>
+
+                            <InputDate @bind-Value="Model.ContractDate"
+                                       class="form-control-custom" />
+
+                            <ValidationMessage For="@(() => Model.ContractDate)" class="validation-message" />
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["입찰일|Bid Date"] <span class="required">*</span>
+                            </label>
+
+                            <InputDate @bind-Value="Model.BidDate"
+                                       class="form-control-custom" />
+
+                            <ValidationMessage For="@(() => Model.BidDate)" class="validation-message" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["착공일|Start Date"] <span class="required">*</span>
+                            </label>
+
+                            <InputDate @bind-Value="Model.StartDate"
+                                       class="form-control-custom" />
+
+                            <ValidationMessage For="@(() => Model.StartDate)" class="validation-message" />
+                        </div>
+                    </div>
+
+                    <div class="form-group half-width">
+                        <label class="form-label">
+                            @Text["준공예정일|Completion Date"] <span class="required">*</span>
+                        </label>
+
+                        <InputDate @bind-Value="Model.CompletionDate"
+                                   class="form-control-custom" />
+
+                        <ValidationMessage For="@(() => Model.CompletionDate)" class="validation-message" />
+                    </div>
+                </div>
+            }
+            else if (CurrentStep == 3)
+            {
+                <div class="step-content">
+                    <div class="step-title-badge">
+                        STEP 3. @Text["ESC 조정 설정|ESC Settings"]
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">
+                            @Text["조정기준일 (비교시점)|Adjustment Base Date"] <span class="required">*</span>
+                        </label>
+
+                        <InputDate @bind-Value="Model.CompareDate"
+                                   class="form-control-custom" />
+
+                        <ValidationMessage For="@(() => Model.CompareDate)" class="validation-message" />
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["등락율 기준(%)|Fluctuation Rate (%)"]
+                            </label>
+
+                            <InputNumber @bind-Value="Model.ThresholdRate"
+                                         class="form-control-custom" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["경과기간 기준(일)|Time Threshold (days)"]
+                            </label>
+
+                            <InputNumber @bind-Value="Model.ThresholdDays"
+                                         class="form-control-custom" />
+                        </div>
+                    </div>
+
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["적용제외금액(원)|Exclusion Amount"]
+                            </label>
+
+                            <InputNumber @bind-Value="Model.ExcludedAmt"
+                                         class="form-control-custom" />
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                @Text["직전연월|Previous Month"]
+                            </label>
+
+                            <InputText @bind-Value="Model.PreviousMonth"
+                                       class="form-control-custom"
+                                       placeholder="YYYY-MM" />
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="wizard-actions">
+                @if (CurrentStep > 1)
+                {
+                    <button type="button"
+                            class="btn-action btn-secondary-custom"
+                            @onclick="PrevStep"
+                            @onclick:preventDefault="true"
+                            @onclick:stopPropagation="true"
+                            disabled="@IsBusy">
+                        <i class="fa-solid fa-chevron-left"></i>
+                        @Text["이전|Back"]
+                    </button>
+                }
+                else
+                {
+                    <button type="button"
+                            class="btn-action btn-secondary-custom"
+                            @onclick="LoadSample"
+                            @onclick:preventDefault="true"
+                            @onclick:stopPropagation="true"
+                            disabled="@IsBusy">
+                        <i class="fa-solid fa-magic"></i>
+                        @Text["샘플 데이터|Sample Data"]
+                    </button>
+                }
+
+                @if (CurrentStep < 3)
+                {
+                    <button type="button"
+                            class="btn-action btn-primary-custom"
+                            @onclick="NextStep"
+                            @onclick:preventDefault="true"
+                            @onclick:stopPropagation="true"
+                            disabled="@IsBusy">
+                        @Text["다음 단계|Next"]
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                }
+                else
+                {
+                    <button type="button"
+                            class="btn-action btn-success-custom"
+                            @onclick="HandleValidSubmit"
+                            @onclick:preventDefault="true"
+                            @onclick:stopPropagation="true"
+                            disabled="@IsBusy">
+                        @if (IsBusy)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        else
+                        {
+                            <i class="fa-solid fa-check"></i>
+                        }
+
+                        @Text["산출 시작|Complete & Save"]
+                    </button>
+                }
+            </div>
+        </div>
+    </EditForm>
+</div>
+<style>
+    .wizard-container {
+        --primary-color: #1e3a5f;
+        --secondary-color: #0369a1;
+        --accent-orange: #f59e0b;
+        --bg-color: #f8fafc;
+        --text-color: #1e293b;
+        --border-color: #e2e8f0;
+        max-width: 720px;
+        margin: 10px auto;
+        padding: 15px;
+    }
+
+    .wizard-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+        .wizard-header h2 {
+            font-weight: 800;
+            color: var(--primary-color);
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .wizard-header p {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 8px;
+        }
+
+    .wizard-title-icon {
+        color: var(--accent-orange);
+    }
+
+    .stepper {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: relative;
+        margin-bottom: 30px;
+        padding: 0 40px;
+    }
+
+        .stepper::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 80px;
+            right: 80px;
+            height: 3px;
+            background: var(--border-color);
+            z-index: 1;
+        }
+
+    .step-item {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        width: 120px;
+    }
+
+    .step-circle {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: white;
+        border: 3px solid var(--border-color);
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 14px;
+        transition: all 0.25s ease;
+    }
+
+    .step-item.active .step-circle {
+        border-color: var(--primary-color);
+        background: var(--primary-color);
+        color: white;
+        box-shadow: 0 0 0 5px rgba(30, 58, 95, 0.15);
+        transform: scale(1.1);
+    }
+
+    .step-item.completed .step-circle {
+        background: #10b981;
+        border-color: #10b981;
+        color: white;
+    }
+
+    .step-label {
+        font-size: 13px;
+        font-weight: 700;
+        color: #94a3b8;
+        text-align: center;
+        transition: color 0.25s ease;
+    }
+
+    .step-item.active .step-label {
+        color: var(--primary-color);
+    }
+
+    .wizard-card {
+        background: white;
+        border-radius: 24px;
+        padding: 32px 40px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.03);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .step-title-badge {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(3, 105, 161, 0.1);
+        color: var(--secondary-color);
+        padding: 6px 16px;
+        border-radius: 50px;
+        font-size: 13px;
+        font-weight: 800;
+        margin-bottom: 24px;
+        letter-spacing: 0.5px;
+    }
+
+    .form-group {
+        margin-bottom: 12px;
+    }
+
+    .form-label {
+        font-size: 13px;
+        font-weight: 800;
+        color: #334155;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .required {
+        color: #ef4444;
+        margin-left: 2px;
+    }
+
+    .form-control-custom {
+        width: 100%;
+        padding: 7px 9px;
+        border: 2px solid var(--border-color);
+        border-radius: 12px;
+        font-size: 13px;
+        color: var(--text-color);
+        transition: all 0.2s ease;
+        background: #fcfcfd;
+    }
+
+        .form-control-custom:focus {
+            border-color: var(--secondary-color);
+            outline: none;
+            background: white;
+            box-shadow: 0 0 0 4px rgba(3, 105, 161, 0.08);
+        }
+
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+    }
+
+    .half-width {
+        width: 50%;
+    }
+
+    .validation-message {
+        color: #ef4444;
+        font-size: 13px;
+        margin-top: 6px;
+        font-weight: 600;
+    }
+
+    .wizard-actions {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 8px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .btn-action {
+        padding: 14px 32px;
+        border-radius: 14px;
+        font-weight: 800;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        border: none;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+        .btn-action:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+    .btn-secondary-custom {
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+        .btn-secondary-custom:hover:not(:disabled) {
+            background: #e2e8f0;
+            transform: translateX(-4px);
+        }
+
+    .btn-primary-custom {
+        background: var(--primary-color);
+        color: white;
+    }
+
+        .btn-primary-custom:hover:not(:disabled) {
+            background: #0f172a;
+            transform: translateX(4px);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
+        }
+
+    .btn-success-custom {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        box-shadow: 0 10px 20px rgba(16, 185, 129, 0.2);
+    }
+
+        .btn-success-custom:hover:not(:disabled) {
+            transform: scale(1.02);
+            box-shadow: 0 12px 25px rgba(16, 185, 129, 0.3);
+        }
+
+    .loading-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(255, 255, 255, 0.7);
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+    }
+
+    @@media (max-width: 768px) {
+        .wizard-container {
+            padding: 12px;
+        }
+
+        .wizard-card {
+            padding: 24px 20px;
+        }
+
+        .stepper {
+            padding: 0 10px;
+        }
+
+            .stepper::before {
+                left: 45px;
+                right: 45px;
+            }
+
+        .step-item {
+            width: 90px;
+        }
+
+        .step-label {
+            font-size: 11px;
+        }
+
+        .grid-2 {
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        .half-width {
+            width: 100%;
+        }
+
+        .wizard-actions {
+            gap: 12px;
+        }
+
+        .btn-action {
+            width: 100%;
+            justify-content: center;
+            padding: 12px 16px;
+        }
+    }
+</style>
+@code {
+    private int CurrentStep { get; set; } = 1;
+
+    private ContractWizardDto Model { get; set; } = new();
+
+    private bool IsBusy { get; set; }
+
+    private List<ConstructionCategory> ActiveCategories { get; set; } = new();
+
+    private List<ContractCategory> ActiveContracts { get; set; } = new();
+
+    private ConstructionCategory? SelectedCategory { get; set; }
+
+    private ContractCategory? SelectedContract { get; set; }
+
+    private List<IBrowserFile> UploadedSampleFiles { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInitialDataAsync();
+        SetDefaultDates();
+    }
+
+    private async Task LoadInitialDataAsync()
+    {
+        try
+        {
+            IsBusy = true;
+
+            ActiveCategories = await CategoryService.GetActiveCategories();
+            ActiveContracts = await ContractCategoryService.GetActiveCategories();
+        }
+        catch
+        {
+            await Alert.Error(
+                Text["초기 데이터를 불러오는 중 오류가 발생했습니다.|An error occurred while loading initial data."],
+                Text["오류|Error"]
+            );
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void SetDefaultDates()
+    {
+        var today = DateTime.Today;
+
+        Model.ContractDate = today;
+        Model.BidDate = today;
+        Model.StartDate = today;
+        Model.CompletionDate = today.AddYears(1);
+        Model.CompareDate = today;
+
+        if (Model.ThresholdRate <= 0)
+        {
+            Model.ThresholdRate = 3.0m;
+        }
+
+        if (Model.ThresholdDays <= 0)
+        {
+            Model.ThresholdDays = 90;
+        }
+    }
+
+    private string GetStepClass(int step)
+    {
+        if (CurrentStep == step)
+        {
+            return "step-item active";
+        }
+
+        if (CurrentStep > step)
+        {
+            return "step-item completed";
+        }
+
+        return "step-item";
+    }
+
+    private void OnCategoryChanged(ConstructionCategory? category)
+    {
+        SelectedCategory = category;
+        Model.WorkType = category?.Name;
+    }
+
+    private void OnContractChanged(ContractCategory? contract)
+    {
+        SelectedContract = contract;
+        Model.ContractMethod = contract?.Name;
+    }
+
+    private async Task NextStep()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (!await ValidateCurrentStepAsync())
+        {
+            return;
+        }
+
+        if (CurrentStep < 3)
+        {
+            CurrentStep++;
+        }
+    }
+
+    private void PrevStep()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (CurrentStep > 1)
+        {
+            CurrentStep--;
+        }
+    }
+
+    private void OnSampleFilesChanged(InputFileChangeEventArgs e)
+    {
+        var maxAllowedFiles = 5;
+        var maxFileSize = 10 * 1024 * 1024; // 10 MB
+
+        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        {
+            if (file.Size <= maxFileSize && !UploadedSampleFiles.Any(f => f.Name == file.Name))
+            {
+                UploadedSampleFiles.Add(file);
+            }
+        }
+    }
+
+    private void RemoveSampleFile(IBrowserFile file)
+    {
+        UploadedSampleFiles.Remove(file);
+    }
+
+    private async Task DownloadExcelTemplate()
+    {
+        try
+        {
+            var fileUrl = "/assets/sample/Template_ESC_Data.csv";
+            var fileName = "Template_ESC_Data.csv";
+            
+            await JSRuntime.InvokeVoidAsync("uploadHelper.downloadFile", fileUrl, fileName);
+        }
+        catch (Exception ex)
+        {
+            await Alert.Error(
+                Text["다운로드 중 오류가 발생했습니다.|Error occurred during download."],
+                Text["오류|Error"]
+            );
+        }
+    }
+
+    private async Task DownloadPdfTemplate()
+    {
+        try
+        {
+            var fileUrl = "/assets/sample/Template_ESC_Data.pdf";
+            var fileName = "Template_ESC_Data.pdf";
+            
+            await JSRuntime.InvokeVoidAsync("uploadHelper.downloadFile", fileUrl, fileName);
+        }
+        catch (Exception ex)
+        {
+            await Alert.Error(
+                Text["다운로드 중 오류가 발생했습니다.|Error occurred during download."],
+                Text["오류|Error"]
+            );
+        }
+    }
+
+    private async Task<bool> ValidateCurrentStepAsync()
+    {
+        var errorMessage = GetCurrentStepValidationMessage();
+
+        if (string.IsNullOrWhiteSpace(errorMessage))
+        {
+            return true;
+        }
+
+        await Alert.Error(
+            errorMessage,
+            Text["검증 오류|Validation Error"]
+        );
+
+        return false;
+    }
+
+    private string GetCurrentStepValidationMessage()
+    {
+        var validation = ContractWizardValidator.Validate(Model, CurrentStep);
+        return validation.IsValid ? string.Empty : Text[validation.Message];
+    }
+
+    private string ValidateStep1()
+    {
+        if (string.IsNullOrWhiteSpace(Model.ProjectName))
+        {
+            return Text["공사명을 입력하세요|Please enter Project Name"];
+        }
+
+        if (string.IsNullOrWhiteSpace(Model.Contractor))
+        {
+            return Text["시공사명을 입력하세요|Please enter Contractor"];
+        }
+
+        if (string.IsNullOrWhiteSpace(Model.Client))
+        {
+            return Text["발주처명을 입력하세요|Please enter Client"];
+        }
+
+        if (string.IsNullOrWhiteSpace(Model.WorkType))
+        {
+            return Text["공사 종류를 선택하세요|Please select Work Type"];
+        }
+
+        if (string.IsNullOrWhiteSpace(Model.ContractMethod))
+        {
+            return Text["계약방법을 선택하세요|Please select Contract Method"];
+        }
+
+        if (Model.BidRate <= 0)
+        {
+            return Text["낙찰율은 0보다 커야 합니다|Bid Rate must be greater than 0"];
+        }
+
+        if (Model.BidRate > 100)
+        {
+            return Text["낙찰율은 100%를 초과할 수 없습니다|Bid Rate cannot exceed 100%"];
+        }
+
+        return string.Empty;
+    }
+
+    private string ValidateStep2()
+    {
+        if (Model.ContractAmount <= 0)
+        {
+            return Text["계약금액을 입력하세요|Please enter Contract Amount"];
+        }
+
+        if (Model.AdvanceAmt < 0)
+        {
+            return Text["선금액은 0보다 작을 수 없습니다|Advance Payment cannot be less than 0"];
+        }
+
+        if (Model.AdvanceAmt > Model.ContractAmount)
+        {
+            return Text["선금액은 계약금액보다 클 수 없습니다|Advance Payment cannot exceed Contract Amount"];
+        }
+
+        if (!Model.ContractDate.HasValue)
+        {
+            return Text["계약체결일을 선택하세요|Please select Contract Date"];
+        }
+
+        if (!Model.BidDate.HasValue)
+        {
+            return Text["입찰일을 선택하세요|Please select Bid Date"];
+        }
+
+        if (!Model.StartDate.HasValue)
+        {
+            return Text["착공일을 선택하세요|Please select Start Date"];
+        }
+
+        if (!Model.CompletionDate.HasValue)
+        {
+            return Text["준공예정일을 선택하세요|Please select Completion Date"];
+        }
+
+        if (Model.CompletionDate.Value <= Model.StartDate.Value)
+        {
+            return Text["준공일은 착공일보다 늦어야 합니다|Completion Date must be after Start Date"];
+        }
+
+        if (Model.ContractDate.Value < Model.BidDate.Value)
+        {
+            return Text["계약체결일은 입찰일보다 빠를 수 없습니다|Contract Date cannot be earlier than Bid Date"];
+        }
+
+        return string.Empty;
+    }
+
+    private string ValidateStep3()
+    {
+        if (!Model.CompareDate.HasValue)
+        {
+            return Text["조정기준일을 선택하세요|Please select Adjustment Base Date"];
+        }
+
+        if (Model.ThresholdRate <= 0)
+        {
+            return Text["등락율 기준은 0보다 커야 합니다|Fluctuation Rate must be greater than 0"];
+        }
+
+        if (Model.ThresholdDays <= 0)
+        {
+            return Text["경과기간 기준은 0보다 커야 합니다|Time Threshold must be greater than 0"];
+        }
+
+        if (Model.ExcludedAmt < 0)
+        {
+            return Text["적용제외금액은 0보다 작을 수 없습니다|Exclusion Amount cannot be less than 0"];
+        }
+
+        if (Model.CompareDate.HasValue && Model.BidDate.HasValue)
+        {
+            var diffDays = (Model.CompareDate.Value.Date - Model.BidDate.Value.Date).Days;
+
+            if (diffDays < Model.ThresholdDays)
+            {
+                return Text[
+                    $"경과기간이 {diffDays}일입니다. 조정기준일은 입찰일로부터 {Model.ThresholdDays}일 이상이어야 합니다.|The elapsed period is {diffDays} days. The adjustment base date must be at least {Model.ThresholdDays} days after the bid date."
+                ];
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(Model.PreviousMonth) && !IsValidYearMonth(Model.PreviousMonth))
+        {
+            return Text["직전연월 형식은 YYYY-MM 이어야 합니다|Previous Month format must be YYYY-MM"];
+        }
+
+        return string.Empty;
+    }
+
+    private static bool IsValidYearMonth(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        return DateTime.TryParseExact(
+            value,
+            "yyyy-MM",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out _
+        );
+    }
+
+    private void LoadSample()
+    {
+        Model = new ContractWizardDto
+        {
+            ProjectName = "조천정수장 고도정수처리시설 전기공사",
+            Contractor = "컨코스트 건설",
+            Client = "한국수자원공사",
+            WorkType = "전기",
+            ContractMethod = "계속비",
+            BidRate = 87.50m,
+            PreparedBy = "주식회사 컨코스트",
+            ContractAmount = 1250000000,
+            AdvanceAmt = 0,
+            ContractDate = new DateTime(2024, 1, 15),
+            BidDate = new DateTime(2023, 12, 10),
+            StartDate = new DateTime(2024, 2, 1),
+            CompletionDate = new DateTime(2025, 2, 1),
+            CompareDate = new DateTime(2024, 8, 1),
+            ThresholdRate = 3.0m,
+            ThresholdDays = 90,
+            ExcludedAmt = 0,
+            PreviousMonth = "2024-07"
+        };
+
+        SelectedCategory = ActiveCategories.FirstOrDefault(x => x.Name == Model.WorkType);
+        SelectedContract = ActiveContracts.FirstOrDefault(x => x.Name == Model.ContractMethod);
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (IsBusy)
+        {
+            return;
+        }
+
+        if (!await ValidateCurrentStepAsync())
+        {
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+
+            var result = await ESCService.CreateContractAsync(Model);
+
+            if (result == null || !result.Success)
+            {
+                IsBusy = false;
+                StateHasChanged();
+
+                await Alert.Error(
+                    string.IsNullOrWhiteSpace(result?.Message)
+                        ? Text["저장에 실패했습니다.|Failed to save the project."]
+                        : Text[result.Message],
+                    Text["오류|Error"]
+                );
+
+                return;
+            }
+
+            await Alert.Alert(
+                Text["성공|Success"],
+                Text["프로젝트가 저장되었습니다.|Project saved successfully."]
+            );
+
+            Navigation.NavigateTo("/escalation/workspace");
+        }
+        catch
+        {
+            IsBusy = false;
+            StateHasChanged();
+
+            await Alert.Error(
+                Text["저장 중 오류가 발생했습니다.|An error occurred while saving."],
+                Text["오류|Error"]
+            );
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+}

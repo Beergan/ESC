@@ -1,0 +1,14 @@
+﻿<header>
+    <nav class="navbar">
+        <a class="navbar-brand text-white" href="#"></a>
+    </nav>
+</header>
+<div class="app-content-wrapper wrapper-centered" style="height: calc(100vh - calc(100vh - 100%) - 66px)">
+    <div class="app-loading centered text-center">
+        <div class="app-loading-caption mt-2">HRM v1</div>
+        <div class="app-loading-sm-text mt-2">@LoadingText</div>
+    </div>
+</div>
+@code {
+    [Parameter] public string LoadingText { get; set; }
+}

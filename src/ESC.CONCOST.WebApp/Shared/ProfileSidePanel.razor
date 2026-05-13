@@ -1,0 +1,122 @@
+@* ============================================================
+   ProfileSidePanel.razor
+   Offcanvas sidebar: User Profile Card + Upcoming Birthdays
+   Ported from UI Prototype (#sidebar-wrapper)
+   ============================================================ *@
+
+@* ---- Offcanvas Panel ---- *@
+<div class="offcanvas offcanvas-start border-end shadow-sm" tabindex="-1" id="profileSidePanel"
+     aria-labelledby="profileSidePanelLabel"
+     style="width: 270px; background-color: #f4f6f8;">
+
+    @* Offcanvas Header (mobile close button) *@
+    <div class="offcanvas-header d-lg-none bg-white border-bottom">
+        <h5 class="offcanvas-title fw-bold text-primary" id="profileSidePanelLabel">
+            <i class="fa-solid fa-address-card me-2"></i>Hồ sơ Của Tôi
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+                data-bs-target="#profileSidePanel" aria-label="Close"></button>
+    </div>
+
+    @* Offcanvas Body *@
+    <div class="offcanvas-body d-flex flex-column p-3 gap-3">
+
+        @* ---- Profile Card ---- *@
+        <div class="card bg-white border border-light-subtle shadow-sm rounded-4 w-100">
+            <div class="card-body p-4 text-center">
+                @* Avatar *@
+                <div class="d-inline-flex flex-column align-items-center mb-4 cursor-pointer hover-accent">
+                    <div class="rounded-circle border d-flex align-items-center justify-content-center bg-light text-secondary mb-2"
+                         style="width:68px; height:68px;">
+                        <i class="fa-solid fa-user fs-3"></i>
+                    </div>
+                    <span class="text-muted fw-bold" style="font-size:11px;">Ảnh đại diện</span>
+                </div>
+
+                @* User Info *@
+                <div class="text-start small fw-bold">
+                    <div class="d-flex align-items-center mb-3">
+                        <span class="text-muted" style="min-width:60px;">Họ tên</span>
+                        <span class="text-dark fw-bolder ms-3">@(FullName ?? "-")</span>
+                    </div>
+                    <div class="d-flex align-items-start mb-3">
+                        <span class="text-muted" style="min-width:60px;">Chức vụ</span>
+                        <span class="text-dark px-2 py-1 rounded-3 text-start ms-3 fw-bold"
+                              style="background:rgba(240,138,36,0.08); color:rgb(30, 41, 59); font-size:12px;">
+                            @(Position ?? "Nhân viên")
+                        </span>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted" style="min-width:60px;">Phòng ban</span>
+                        <span class="text-dark fw-bolder ms-3">@(Department ?? "-")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ---- Upcoming Birthdays ---- *@
+        <div class="card bg-white border border-light-subtle shadow-sm rounded-4 w-100 flex-grow-1 pb-2">
+            <div class="card-body p-4 pb-3">
+                <h6 class="fw-bold text-dark mb-3">Sinh nhật sắp tới</h6>
+
+                @if (Birthdays != null && Birthdays.Any())
+                {
+                    <div class="d-grid gap-2 pb-1" style="grid-template-columns: repeat(3, 1fr);">
+                        @foreach (var b in Birthdays.Take(_showCount))
+                        {
+                            <div class="d-flex flex-column align-items-center p-2 rounded-3 bg-light hover-accent cursor-pointer bday-card-item"
+                                 style="border:1px solid rgba(0,0,0,0.06); transition:all 0.15s;">
+                                <div class="rounded-circle bg-white border d-flex align-items-center justify-content-center mb-1 shadow-sm"
+                                     style="width:36px; height:36px;">
+                                    <i class="fa-solid fa-user text-muted" style="font-size:14px;"></i>
+                                </div>
+                                <span class="fw-bold text-dark text-truncate w-100 text-center" style="font-size:11px;">@b.Name</span>
+                                <span class="text-muted" style="font-size:10px; font-weight:700;">@b.Date</span>
+                            </div>
+                        }
+                    </div>
+
+                    @if (Birthdays.Count > 3)
+                    {
+                        <div class="text-center mt-3">
+                            <button class="btn btn-sm btn-light border rounded-pill px-3 fw-bold text-muted shadow-sm hover-accent"
+                                    style="font-size:11px;" @onclick="ToggleShowMore">
+                                @(_showAll ? "Thu gọn" : "Xem thêm")
+                                <i class="fa-solid @(_showAll ? "fa-chevron-up" : "fa-chevron-down") ms-1"></i>
+                            </button>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center text-muted fw-bold py-3" style="font-size:12px;">
+                        Không có sinh nhật sắp tới
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    /// <summary>Full name of logged-in user</summary>
+    [Parameter] public string? FullName { get; set; }
+
+    /// <summary>Job position / role label</summary>
+    [Parameter] public string? Position { get; set; }
+
+    /// <summary>Department name</summary>
+    [Parameter] public string? Department { get; set; }
+
+    /// <summary>List of upcoming birthdays to display in the sidebar</summary>
+    [Parameter] public List<BirthdayItem>? Birthdays { get; set; }
+
+    private bool _showAll = false;
+    private int _showCount => _showAll ? (Birthdays?.Count ?? 0) : 3;
+
+    private void ToggleShowMore() => _showAll = !_showAll;
+
+    /// <summary>Data model for a single birthday entry</summary>
+    public record BirthdayItem(string Name, string Date);
+}

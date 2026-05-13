@@ -1,0 +1,28 @@
+﻿<li class="nav-item">
+    <a class="nav-link" href="javascript:void(0)"
+    title="Đổi sang chế độ [@InvertedMode]" @onclick="@(() => SwitchMode())">
+        <i class="@(IsWasm?"fab fa-internet-explorer":"fa fa-server")"></i>
+    </a>
+</li>
+
+@code{
+    [Inject] NavigationManager NavManager { get; set; }
+    private bool IsWasm = false;
+    private string CurrentMode { get; set; }
+    private string InvertedMode { get; set; }
+
+    protected override void OnInitialized()
+    {
+        IsWasm = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier == "browser-wasm";
+        CurrentMode = IsWasm ? "browser" : "server";
+        InvertedMode = !IsWasm ? "browser" : "server";
+    }
+
+    private void SwitchMode()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        string path = uri.GetLeftPart(UriPartial.Authority);
+        string target = IsWasm ? $"{path}/switch-to-server?redirect={NavManager.Uri}" : $"{path}/switch-to-wasm?redirect=?redirect={NavManager.Uri}";
+        NavManager.NavigateTo(target, forceLoad: true);
+    }
+}
