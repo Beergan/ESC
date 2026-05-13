@@ -419,307 +419,306 @@
             </div>
         </div>
     </EditForm>
-</div>
-<style>
-    .wizard-container {
-        --primary-color: #1e3a5f;
-        --secondary-color: #0369a1;
-        --accent-orange: #f59e0b;
-        --bg-color: #f8fafc;
-        --text-color: #1e293b;
-        --border-color: #e2e8f0;
-        max-width: 720px;
-        margin: 10px auto;
-        padding: 15px;
-    }
-
-    .wizard-header {
-        text-align: center;
-        margin-bottom: 40px;
-    }
-
-        .wizard-header h2 {
-            font-weight: 800;
-            color: var(--primary-color);
-            font-size: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-        }
-
-        .wizard-header p {
-            font-size: 13px;
-            color: #64748b;
-            margin-top: 8px;
-        }
-
-    .wizard-title-icon {
-        color: var(--accent-orange);
-    }
-
-    .stepper {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        position: relative;
-        margin-bottom: 30px;
-        padding: 0 40px;
-    }
-
-        .stepper::before {
-            content: '';
-            position: absolute;
-            top: 15px;
-            left: 80px;
-            right: 80px;
-            height: 3px;
-            background: var(--border-color);
-            z-index: 1;
-        }
-
-    .step-item {
-        position: relative;
-        z-index: 2;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-        width: 120px;
-    }
-
-    .step-circle {
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        background: white;
-        border: 3px solid var(--border-color);
-        color: #94a3b8;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 800;
-        font-size: 14px;
-        transition: all 0.25s ease;
-    }
-
-    .step-item.active .step-circle {
-        border-color: var(--primary-color);
-        background: var(--primary-color);
-        color: white;
-        box-shadow: 0 0 0 5px rgba(30, 58, 95, 0.15);
-        transform: scale(1.1);
-    }
-
-    .step-item.completed .step-circle {
-        background: #10b981;
-        border-color: #10b981;
-        color: white;
-    }
-
-    .step-label {
-        font-size: 13px;
-        font-weight: 700;
-        color: #94a3b8;
-        text-align: center;
-        transition: color 0.25s ease;
-    }
-
-    .step-item.active .step-label {
-        color: var(--primary-color);
-    }
-
-    .wizard-card {
-        background: white;
-        border-radius: 24px;
-        padding: 32px 40px;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.03);
-        border: 1px solid rgba(0, 0, 0, 0.05);
-        position: relative;
-        overflow: hidden;
-    }
-
-    .step-title-badge {
-        display: inline-flex;
-        align-items: center;
-        background: rgba(3, 105, 161, 0.1);
-        color: var(--secondary-color);
-        padding: 6px 16px;
-        border-radius: 50px;
-        font-size: 13px;
-        font-weight: 800;
-        margin-bottom: 24px;
-        letter-spacing: 0.5px;
-    }
-
-    .form-group {
-        margin-bottom: 12px;
-    }
-
-    .form-label {
-        font-size: 13px;
-        font-weight: 800;
-        color: #334155;
-        margin-bottom: 8px;
-        display: block;
-    }
-
-    .required {
-        color: #ef4444;
-        margin-left: 2px;
-    }
-
-    .form-control-custom {
-        width: 100%;
-        padding: 7px 9px;
-        border: 2px solid var(--border-color);
-        border-radius: 12px;
-        font-size: 13px;
-        color: var(--text-color);
-        transition: all 0.2s ease;
-        background: #fcfcfd;
-    }
-
-        .form-control-custom:focus {
-            border-color: var(--secondary-color);
-            outline: none;
-            background: white;
-            box-shadow: 0 0 0 4px rgba(3, 105, 161, 0.08);
-        }
-
-    .grid-2 {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 24px;
-    }
-
-    .half-width {
-        width: 50%;
-    }
-
-    .validation-message {
-        color: #ef4444;
-        font-size: 13px;
-        margin-top: 6px;
-        font-weight: 600;
-    }
-
-    .wizard-actions {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 8px;
-        padding-top: 24px;
-        border-top: 1px solid var(--border-color);
-    }
-
-    .btn-action {
-        padding: 14px 32px;
-        border-radius: 14px;
-        font-weight: 800;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.25s ease;
-        border: none;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-        .btn-action:disabled {
-            opacity: 0.65;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-
-    .btn-secondary-custom {
-        background: #f1f5f9;
-        color: #475569;
-    }
-
-        .btn-secondary-custom:hover:not(:disabled) {
-            background: #e2e8f0;
-            transform: translateX(-4px);
-        }
-
-    .btn-primary-custom {
-        background: var(--primary-color);
-        color: white;
-    }
-
-        .btn-primary-custom:hover:not(:disabled) {
-            background: #0f172a;
-            transform: translateX(4px);
-            box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
-        }
-
-    .btn-success-custom {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        color: white;
-        box-shadow: 0 10px 20px rgba(16, 185, 129, 0.2);
-    }
-
-        .btn-success-custom:hover:not(:disabled) {
-            transform: scale(1.02);
-            box-shadow: 0 12px 25px rgba(16, 185, 129, 0.3);
-        }
-
-    .loading-overlay {
-        position: absolute;
-        inset: 0;
-        background: rgba(255, 255, 255, 0.7);
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        backdrop-filter: blur(2px);
-    }
-
-    @@media (max-width: 768px) {
+    <style>
         .wizard-container {
-            padding: 12px;
+            --primary-color: #1e3a5f;
+            --secondary-color: #0369a1;
+            --accent-orange: #f59e0b;
+            --bg-color: #f8fafc;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
+            max-width: 720px;
+            margin: 10px auto;
+            padding: 15px;
         }
 
-        .wizard-card {
-            padding: 24px 20px;
+        .wizard-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+            .wizard-header h2 {
+                font-weight: 800;
+                color: var(--primary-color);
+                font-size: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 12px;
+            }
+
+            .wizard-header p {
+                font-size: 13px;
+                color: #64748b;
+                margin-top: 8px;
+            }
+
+        .wizard-title-icon {
+            color: var(--accent-orange);
         }
 
         .stepper {
-            padding: 0 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            margin-bottom: 30px;
+            padding: 0 40px;
         }
 
             .stepper::before {
-                left: 45px;
-                right: 45px;
+                content: '';
+                position: absolute;
+                top: 15px;
+                left: 80px;
+                right: 80px;
+                height: 3px;
+                background: var(--border-color);
+                z-index: 1;
             }
 
         .step-item {
-            width: 90px;
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 120px;
+        }
+
+        .step-circle {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: white;
+            border: 3px solid var(--border-color);
+            color: #94a3b8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 14px;
+            transition: all 0.25s ease;
+        }
+
+        .step-item.active .step-circle {
+            border-color: var(--primary-color);
+            background: var(--primary-color);
+            color: white;
+            box-shadow: 0 0 0 5px rgba(30, 58, 95, 0.15);
+            transform: scale(1.1);
+        }
+
+        .step-item.completed .step-circle {
+            background: #10b981;
+            border-color: #10b981;
+            color: white;
         }
 
         .step-label {
-            font-size: 11px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-align: center;
+            transition: color 0.25s ease;
         }
 
+        .step-item.active .step-label {
+            color: var(--primary-color);
+        }
+
+        .wizard-card {
+            background: white;
+            border-radius: 24px;
+            padding: 32px 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            position: relative;
+        }
+
+        .step-title-badge {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(3, 105, 161, 0.1);
+            color: var(--secondary-color);
+            padding: 6px 16px;
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 800;
+            margin-bottom: 24px;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-label {
+            font-size: 13px;
+            font-weight: 800;
+            color: #334155;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .required {
+            color: #ef4444;
+            margin-left: 2px;
+        }
+
+        .form-control-custom {
+            width: 100%;
+            padding: 7px 9px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            font-size: 13px;
+            color: var(--text-color);
+            transition: all 0.2s ease;
+            background: #fcfcfd;
+        }
+
+            .form-control-custom:focus {
+                border-color: var(--secondary-color);
+                outline: none;
+                background: white;
+                box-shadow: 0 0 0 4px rgba(3, 105, 161, 0.08);
+            }
+
         .grid-2 {
-            grid-template-columns: 1fr;
-            gap: 12px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
         }
 
         .half-width {
-            width: 100%;
+            width: 50%;
+        }
+
+        .validation-message {
+            color: #ef4444;
+            font-size: 13px;
+            margin-top: 6px;
+            font-weight: 600;
         }
 
         .wizard-actions {
-            gap: 12px;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
         }
 
         .btn-action {
-            width: 100%;
-            justify-content: center;
-            padding: 12px 16px;
+            padding: 14px 32px;
+            border-radius: 14px;
+            font-weight: 800;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-    }
-</style>
+
+            .btn-action:disabled {
+                opacity: 0.65;
+                cursor: not-allowed;
+                transform: none !important;
+            }
+
+        .btn-secondary-custom {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+            .btn-secondary-custom:hover:not(:disabled) {
+                background: #e2e8f0;
+                transform: translateX(-4px);
+            }
+
+        .btn-primary-custom {
+            background: var(--primary-color);
+            color: white;
+        }
+
+            .btn-primary-custom:hover:not(:disabled) {
+                background: #0f172a;
+                transform: translateX(4px);
+                box-shadow: 0 10px 20px rgba(15, 23, 42, 0.2);
+            }
+
+        .btn-success-custom {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            box-shadow: 0 10px 20px rgba(16, 185, 129, 0.2);
+        }
+
+            .btn-success-custom:hover:not(:disabled) {
+                transform: scale(1.02);
+                box-shadow: 0 12px 25px rgba(16, 185, 129, 0.3);
+            }
+
+        .loading-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0.7);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(2px);
+        }
+
+        @@media (max-width: 768px) {
+            .wizard-container {
+                padding: 12px;
+            }
+
+            .wizard-card {
+                padding: 24px 20px;
+            }
+
+            .stepper {
+                padding: 0 10px;
+            }
+
+                .stepper::before {
+                    left: 45px;
+                    right: 45px;
+                }
+
+            .step-item {
+                width: 90px;
+            }
+
+            .step-label {
+                font-size: 11px;
+            }
+
+            .grid-2 {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .half-width {
+                width: 100%;
+            }
+
+            .wizard-actions {
+                gap: 12px;
+            }
+
+            .btn-action {
+                width: 100%;
+                justify-content: center;
+                padding: 12px 16px;
+            }
+        }
+    </style>
+</div>
 @code {
     private int CurrentStep { get; set; } = 1;
 
