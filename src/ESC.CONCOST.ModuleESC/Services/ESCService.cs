@@ -34,15 +34,39 @@ public class ESCService : MyServiceBase, IESCService
 
     public async Task<List<Contract>> GetContractsAsync()
     {
+        if (!CanViewEscWorkspace())
+        {
+            _log.LogWarning(
+                "Permission denied when getting ESC contracts. User={UserName}",
+                _ctx.GetCurrentUser()?.UserName
+            );
+
+            return new List<Contract>();
+        }
+
         using (var db = _ctx.ConnectDb())
         {
             try
             {
-                var customerId = _ctx.GetCurrentUser()?.CustomerId;
+                var currentUser = _ctx.GetCurrentUser();
+                var customerId = currentUser?.CustomerId;
+                var canViewAll = CanViewAllEscWorkspace();
 
-                return await db.Repo<Contract>().Query()
-                    .AsNoTracking()
-                    .Where(x => !customerId.HasValue || x.CustomerId == customerId)
+                var query = db.Repo<Contract>()
+                    .Query()
+                    .AsNoTracking();
+
+                if (!canViewAll)
+                {
+                    if (!customerId.HasValue)
+                    {
+                        return new List<Contract>();
+                    }
+
+                    query = query.Where(x => x.CustomerId == customerId.Value);
+                }
+
+                return await query
                     .OrderByDescending(x => x.ContractDate)
                     .ToListAsync();
             }
@@ -56,6 +80,10 @@ public class ESCService : MyServiceBase, IESCService
 
     public async Task<ResultOf<Contract>> CreateContractAsync(ContractWizardDto model)
     {
+        if (!CanCreateOrUpdateEscProject())
+        {
+            return ResultOf<Contract>.Error(NoPermissionMessage());
+        }
         using (var db = _ctx.ConnectDb())
         {
             try
@@ -199,7 +227,7 @@ public class ESCService : MyServiceBase, IESCService
 
         return MapDictionaryToContractWizard(values);
     }
-    private static IXLRow? FindExcelHeaderRow(IXLWorksheet worksheet)
+    private static IXLRow FindExcelHeaderRow(IXLWorksheet worksheet)
     {
         var knownHeaders = new[]
         {
@@ -430,6 +458,10 @@ public class ESCService : MyServiceBase, IESCService
     }
     public async Task<ResultOf<ContractWizardDto>> ReadSampleFileAsync([Body] ContractSampleFileRequest request)
     {
+        if (!CanCreateOrUpdateEscProject())
+        {
+            return ResultOf<ContractWizardDto>.Error(NoPermissionMessage());
+        }
         try
         {
             if (request == null ||
@@ -487,6 +519,14 @@ public class ESCService : MyServiceBase, IESCService
     //detele 
     public async Task<Result> DeleteContractAsync(Guid guid)
     {
+        if (!CanDeleteEscProject())
+        {
+            return new Result
+            {
+                Success = false,
+                Message = NoPermissionMessage()
+            };
+        }
         using (var db = _ctx.ConnectDb())
         {
             try
@@ -575,13 +615,30 @@ public class ESCService : MyServiceBase, IESCService
     }
     public async Task<ResultOf<ContractWizardDto>> GetContractAsync(Guid guid)
     {
+        
         using (var db = _ctx.ConnectDb())
         {
             try
             {
+                var canViewAll = CanViewAllEscWorkspace();
+
+                var query = db.Repo<Contract>()
+                    .Query()
+                    .AsNoTracking()
+                    .Where(x => x.Guid == guid);
                 var currentUser = _ctx.GetCurrentUser();
                 var customerId = currentUser?.CustomerId;
+                if (!canViewAll)
+                {
+                    if (!customerId.HasValue)
+                    {
+                        return ResultOf<ContractWizardDto>.Error(
+                            _ctx.Text["고객 정보가 없는 계정은 ESC 프로젝트를 조회할 수 없습니다.|An account without customer information cannot view ESC projects."]
+                        );
+                    }
 
+                    query = query.Where(x => x.CustomerId == customerId.Value);
+                }
                 if (!customerId.HasValue)
                 {
                     return ResultOf<ContractWizardDto>.Error(
@@ -614,6 +671,10 @@ public class ESCService : MyServiceBase, IESCService
     }
     public async Task<ResultOf<Contract>> UpdateContractAsync(Guid guid, ContractWizardDto model)
     {
+        if (!CanCreateOrUpdateEscProject())
+        {
+            return ResultOf<Contract>.Error(NoPermissionMessage());
+        }
         using (var db = _ctx.ConnectDb())
         {
             try
@@ -729,5 +790,30 @@ public class ESCService : MyServiceBase, IESCService
                 );
             }
         }
+    }
+    private string NoPermissionMessage()
+    {
+        return _ctx.Text["권한이 없습니다.|You do not have permission."];
+    }
+
+    private bool CanViewEscWorkspace()
+    {
+        return _ctx.CheckPermission(PERMISSION.ESC_WORKSPACE_VIEW)
+            || _ctx.CheckPermission(PERMISSION.ESC_WORKSPACE_VIEW_ALL);
+    }
+
+    private bool CanViewAllEscWorkspace()
+    {
+        return _ctx.CheckPermission(PERMISSION.ESC_WORKSPACE_VIEW_ALL);
+    }
+
+    private bool CanCreateOrUpdateEscProject()
+    {
+        return _ctx.CheckPermission(PERMISSION.ESC_PROJECT_CREATE_UPDATE);
+    }
+
+    private bool CanDeleteEscProject()
+    {
+        return _ctx.CheckPermission(PERMISSION.ESC_PROJECT_DELETE);
     }
 }

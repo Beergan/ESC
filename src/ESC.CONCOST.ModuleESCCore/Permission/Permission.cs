@@ -16,4 +16,9 @@ public enum PERMISSION
 
     [Function(TextKo = "ESC 프로젝트 삭제", TextEn = "Delete ESC project")]
     ESC_PROJECT_DELETE,
+
+    [Function(TextKo = "ESC 고객 목록 조회", TextEn = "View Customers ESC")]
+    ESC_CUSTOMER_VIEW,
+    [Function(TextKo = "ESC 고객 승인/거절", TextEn = "Approve / Reject Customers ESC")]
+    ESC_CUSTOMER_APPROVE_REJECT,
 }
