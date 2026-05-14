@@ -121,10 +121,7 @@ public class EmployeeService : MyServiceBase, IEmployeeService
                 }
                 else
                 {
-                    if (info.Guid == Guid.Empty)
-                    {
                         await db.Repo<EntityEmployee>().Insert(info);
-                    }
                 }
 
                 await db.SaveChangesAsync();

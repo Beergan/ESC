@@ -1,130 +1,497 @@
-@typeparam TValue
+@typeparam TItem
+@inject ITextTranslator Text
 
-<div class="form-select-wrapper">
-    <select class="form-control @CssClass" 
-            value="@GetStringValue(SelectedValue)" 
-            @onchange="@OnSelectChanged"
-            disabled="@Disabled"
-            @attributes="AdditionalAttributes">
-        @if (!string.IsNullOrWhiteSpace(Placeholder))
-        {
-            <option value="">@Placeholder</option>
-        }
-        @if (Items != null)
-        {
-            @foreach (var item in Items)
+<div class="cp-wrapper @WrapperClass" @onclick:stopPropagation="true">
+    <div class="cp-trigger @(_ddOpen ? "open" : "")" @onclick="ToggleDropdown">
+        <div class="cp-icon">
+            @if (IconTemplate != null)
             {
-                var itemValue = GetStringValue(item.Value);
-                var isSelected = IsSelected(item.Value);
-                <option value="@itemValue" selected="@isSelected">@item.Text</option>
+                @IconTemplate
             }
-        }
-    </select>
-    @if (ShowValidation && ValidationMessage != null)
+            else
+            {
+                <i class="@IconClass"></i>
+            }
+        </div>
+
+        <div class="cp-text">
+            <div class="cp-text-name">
+                @(Value != null ? GetText(Value) : Placeholder)
+            </div>
+
+            @if (!string.IsNullOrEmpty(SubText))
+            {
+                <div class="cp-text-sub">@SubText</div>
+            }
+        </div>
+
+        <div class="cp-chevron @(_ddOpen ? "open" : "")">
+            <i class="fa-solid fa-chevron-down"></i>
+        </div>
+    </div>
+
+    @if (_ddOpen)
     {
-        <div class="invalid-feedback d-block" style="color: red; font-size: 0.875rem; margin-top: 0.25rem;">
-            @ValidationMessage
+        <div class="cp-dropdown @DropdownPlacementClass">
+            @if (ShowSearch)
+            {
+                <div class="cp-search-wrap">
+                    <i class="fa-solid fa-magnifying-glass cp-search-icon-fa"></i>
+
+                    <input class="cp-search"
+                           placeholder="@SearchPlaceholder"
+                           @bind="_ddSearch"
+                           @bind:event="oninput" />
+                </div>
+            }
+
+            <div class="cp-list">
+                @{
+                    var filtered = GetFilteredItems();
+                }
+
+                @foreach (var item in filtered)
+                {
+                    var isSelected = Value != null && EqualityComparer<TItem>.Default.Equals(item, Value);
+
+                    <div class="cp-item @(isSelected ? "selected" : "")"
+                         @onclick="() => SelectItem(item)">
+                        <div class="cp-item-icon">
+                            @if (ItemIconTemplate != null)
+                            {
+                                @ItemIconTemplate(item)
+                            }
+                            else
+                            {
+                                <i class="@IconClass"></i>
+                            }
+                        </div>
+
+                        <span class="cp-item-name">
+                            @GetText(item)
+                        </span>
+
+                        @if (isSelected)
+                        {
+                            <i class="fa-solid fa-check cp-check-icon"></i>
+                        }
+                    </div>
+                }
+
+                @if (!filtered.Any())
+                {
+                    <div class="cp-empty">@EmptyText</div>
+                }
+            </div>
         </div>
     }
+
+    <style>
+            .cp-wrapper {
+                position: relative;
+                min-width: 220px;
+                user-select: none;
+                overflow: visible;
+            }
+
+                .cp-wrapper:has(.cp-trigger.open),
+                .cp-wrapper:focus-within {
+                    z-index: 1060;
+                }
+
+            :host-context(.card):has(.cp-trigger.open),
+            .card:has(.cp-trigger.open) {
+                z-index: 1050 !important;
+            }
+
+            .cp-trigger {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 7px 12px;
+                background: #fff;
+                border: 1.5px solid #e9ecef;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: border-color .18s, box-shadow .18s;
+                min-width: 220px;
+            }
+
+                .cp-trigger:hover {
+                    border-color: rgb(30, 41, 59);
+                    box-shadow: 0 2px 8px rgba(240, 138, 36, .10);
+                }
+
+                .cp-trigger.open {
+                    border-color: rgb(30, 41, 59);
+                    box-shadow: 0 0 0 3px rgba(240, 138, 36, .13);
+                }
+
+            .cp-icon {
+                width: 30px;
+                height: 30px;
+                border-radius: 8px;
+                background: #fff3e0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                color: rgb(30, 41, 59);
+                font-size: 12px;
+            }
+
+            .cp-text {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .cp-text-name {
+                font-size: 13px;
+                font-weight: 700;
+                color: #333;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 150px;
+                line-height: 1.3;
+            }
+
+            .cp-text-sub {
+                font-size: 10px;
+                color: #aaa;
+                margin-top: 1px;
+                line-height: 1;
+            }
+
+            .cp-chevron {
+                flex-shrink: 0;
+                color: #bbb;
+                font-size: 11px;
+                transition: transform .2s;
+            }
+
+                .cp-chevron.open {
+                    transform: rotate(180deg);
+                    color: rgb(30, 41, 59);
+                }
+
+            .cp-dropdown {
+                position: absolute;
+                left: 0;
+                min-width: 100%;
+                background: #fff;
+                border: 1px solid rgba(0, 0, 0, .10);
+                border-radius: 14px;
+                overflow: hidden;
+                z-index: 9999;
+                box-shadow: 0 12px 32px rgba(0, 0, 0, .12);
+            }
+
+            .cp-dropdown-bottom {
+                top: calc(100% + 6px);
+                bottom: auto;
+                animation: cpFadeInDown .15s ease;
+            }
+
+            .cp-dropdown-top {
+                bottom: calc(100% + 6px);
+                top: auto;
+                animation: cpFadeInUp .15s ease;
+            }
+
+            @@keyframes cpFadeInDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-6px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            @@keyframes cpFadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(6px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .cp-search-wrap {
+                padding: 10px 10px 6px;
+                position: relative;
+                border-bottom: 1px solid #f5f5f5;
+            }
+
+            .cp-search-icon-fa {
+                position: absolute;
+                left: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                font-size: 11px;
+                color: #bbb;
+                pointer-events: none;
+            }
+
+            .cp-search {
+                width: 100%;
+                padding: 7px 10px 7px 30px;
+                border: 1.5px solid #f0f0f0;
+                border-radius: 8px;
+                font-size: 13px;
+                background: #f8f9fa;
+                color: #333;
+                outline: none;
+                transition: border-color .15s, background .15s;
+            }
+
+                .cp-search:focus {
+                    border-color: rgb(30, 41, 59);
+                    background: #fff;
+                }
+
+            .cp-list {
+                max-height: 210px;
+                overflow-y: auto;
+                padding: 6px 6px 8px;
+            }
+
+                .cp-list::-webkit-scrollbar {
+                    width: 3px;
+                }
+
+                .cp-list::-webkit-scrollbar-thumb {
+                    background: #eee;
+                    border-radius: 10px;
+                }
+
+            .cp-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 9px 10px;
+                border-radius: 9px;
+                cursor: pointer;
+                transition: background .12s;
+            }
+
+                .cp-item:hover {
+                    background: #f8f9fa;
+                }
+
+                .cp-item.selected {
+                    background: #fff8f0;
+                }
+
+            .cp-item-icon {
+                width: 26px;
+                height: 26px;
+                border-radius: 7px;
+                background: #f0f0f0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: #bbb;
+                font-size: 11px;
+                flex-shrink: 0;
+                transition: background .12s, color .12s;
+            }
+
+            .cp-item.selected .cp-item-icon {
+                background: #fff3e0;
+                color: rgb(30, 41, 59);
+            }
+
+            .cp-item-name {
+                flex: 1;
+                font-size: 13px;
+                color: #444;
+                font-weight: 500;
+            }
+
+            .cp-item.selected .cp-item-name {
+                color: rgb(30, 41, 59);
+                font-weight: 700;
+            }
+
+            .cp-check-icon {
+                font-size: 12px;
+                color: rgb(30, 41, 59);
+            }
+
+            .cp-empty {
+                font-size: 13px;
+                color: #ccc;
+                text-align: center;
+                padding: 18px 0;
+            }
+
+            @@media (max-width: 768px) {
+                .cp-wrapper {
+                    min-width: 160px;
+                }
+
+                .cp-trigger {
+                    min-width: 160px;
+                }
+
+                .cp-text-name {
+                    max-width: 100px;
+                }
+
+                .cp-text-sub {
+                    display: none;
+                }
+            }
+    </style>
 </div>
 
 @code {
-    public class SelectItem<T>
+    [Parameter] public IEnumerable<TItem> DataSource { get; set; } = Array.Empty<TItem>();
+
+    [Parameter] public TItem? Value { get; set; }
+
+    [Parameter] public EventCallback<TItem?> ValueChanged { get; set; }
+
+    [Parameter] public Func<TItem, string>? TextSelector { get; set; }
+
+    [Parameter] public Func<TItem, string>? SecondaryTextSelector { get; set; }
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    [Parameter] public string? SubText { get; set; }
+
+    [Parameter] public bool ShowSearch { get; set; } = true;
+
+    [Parameter] public string? SearchPlaceholder { get; set; }
+
+    [Parameter] public string? EmptyText { get; set; }
+
+    [Parameter] public string IconClass { get; set; } = "fa-solid fa-layer-group";
+
+    [Parameter] public string WrapperClass { get; set; } = string.Empty;
+
+    [Parameter] public string DropdownPlacement { get; set; } = "Bottom";
+
+    [Parameter] public RenderFragment? IconTemplate { get; set; }
+
+    [Parameter] public RenderFragment<TItem>? ItemIconTemplate { get; set; }
+
+    private bool _ddOpen;
+    private string _ddSearch = string.Empty;
+
+    private string DropdownPlacementClass
     {
-        public T? Value { get; set; }
-        public string Text { get; set; } = string.Empty;
+        get
+        {
+            return string.Equals(DropdownPlacement, "Top", StringComparison.OrdinalIgnoreCase)
+                ? "cp-dropdown-top"
+                : "cp-dropdown-bottom";
+        }
     }
 
-    [Parameter] public TValue? SelectedValue { get; set; }
-    [Parameter] public EventCallback<TValue?> SelectedValueChanged { get; set; }
-    [Parameter] public List<SelectItem<TValue>>? Items { get; set; }
-    [Parameter] public string? Placeholder { get; set; }
-    [Parameter] public bool Disabled { get; set; }
-    [Parameter] public string? CssClass { get; set; }
-    [Parameter] public string? ValidationMessage { get; set; }
-    [Parameter] public bool ShowValidation { get; set; } = true;
-    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
-
-    private async Task OnSelectChanged(ChangeEventArgs e)
+    protected override void OnInitialized()
     {
-        var stringValue = e.Value?.ToString();
-        TValue? newValue;
-        
-        if (string.IsNullOrEmpty(stringValue))
+        Placeholder ??= Text["선택...|Select..."];
+        SubText ??= Text["선택됨|Selected"];
+        SearchPlaceholder ??= Text["검색...|Search..."];
+        EmptyText ??= Text["결과가 없습니다|No results found"];
+    }
+
+    private void ToggleDropdown()
+    {
+        _ddOpen = !_ddOpen;
+        _ddSearch = string.Empty;
+    }
+
+    private async Task SelectItem(TItem item)
+    {
+        Value = item;
+        _ddOpen = false;
+        _ddSearch = string.Empty;
+
+        await ValueChanged.InvokeAsync(item);
+    }
+
+    private List<TItem> GetFilteredItems()
+    {
+        var source = DataSource?.ToList() ?? new List<TItem>();
+
+        if (string.IsNullOrWhiteSpace(_ddSearch))
         {
-            newValue = default(TValue);
-        }
-        else
-        {
-            newValue = ConvertValue(stringValue);
+            return source;
         }
 
-        // Chỉ update nếu giá trị thay đổi
-        if (!Equals(SelectedValue, newValue))
-        {
-            SelectedValue = newValue;
-            if (SelectedValueChanged.HasDelegate)
+        var searchTokens = NormalizeText(_ddSearch)
+            .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+        return source
+            .Where(item =>
             {
-                await SelectedValueChanged.InvokeAsync(SelectedValue);
+                var text1 = NormalizeText(GetText(item));
+                var text2 = NormalizeText(GetSecondaryText(item));
+                var combined = text1 + " " + text2;
+
+                return searchTokens.All(token => combined.Contains(token));
+            })
+            .ToList();
+    }
+
+    private string GetText(TItem item)
+    {
+        if (item == null)
+        {
+            return string.Empty;
+        }
+
+        return TextSelector != null
+            ? TextSelector(item)
+            : item.ToString() ?? string.Empty;
+    }
+
+    private string GetSecondaryText(TItem item)
+    {
+        if (item == null)
+        {
+            return string.Empty;
+        }
+
+        return SecondaryTextSelector != null
+            ? SecondaryTextSelector(item)
+            : string.Empty;
+    }
+
+    private string NormalizeText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var normalizedString = text.Normalize(System.Text.NormalizationForm.FormD);
+        var stringBuilder = new System.Text.StringBuilder(capacity: normalizedString.Length);
+
+        for (var i = 0; i < normalizedString.Length; i++)
+        {
+            var c = normalizedString[i];
+            var unicodeCategory = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+
+            if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                stringBuilder.Append(c);
             }
         }
-    }
 
-    private TValue? ConvertValue(string stringValue)
-    {
-        if (string.IsNullOrEmpty(stringValue))
-            return default(TValue);
-
-        var type = typeof(TValue);
-        var underlyingType = Nullable.GetUnderlyingType(type) ?? type;
-
-        if (underlyingType == typeof(int))
-        {
-            if (int.TryParse(stringValue, out var intVal))
-                return (TValue)(object)intVal;
-        }
-        else if (underlyingType == typeof(string))
-        {
-            return (TValue)(object)stringValue;
-        }
-        else if (underlyingType == typeof(Guid))
-        {
-            if (Guid.TryParse(stringValue, out var guidVal))
-                return (TValue)(object)guidVal;
-        }
-        else if (underlyingType == typeof(long))
-        {
-            if (long.TryParse(stringValue, out var longVal))
-                return (TValue)(object)longVal;
-        }
-
-        return default(TValue);
-    }
-
-    private string GetStringValue(TValue? value)
-    {
-        if (value == null)
-            return string.Empty;
-
-        return value switch
-        {
-            int intVal => intVal.ToString(),
-            long longVal => longVal.ToString(),
-            string strVal => strVal,
-            Guid guidVal => guidVal.ToString(),
-            _ => value.ToString() ?? string.Empty
-        };
-    }
-
-    private bool IsSelected(TValue? itemValue)
-    {
-        if (SelectedValue == null && itemValue == null)
-            return true;
-        
-        if (SelectedValue == null || itemValue == null)
-            return false;
-
-        return SelectedValue.Equals(itemValue);
+        return stringBuilder.ToString()
+            .Normalize(System.Text.NormalizationForm.FormC)
+            .Replace("đ", "d")
+            .Replace("Đ", "D")
+            .ToLowerInvariant();
     }
 }
-

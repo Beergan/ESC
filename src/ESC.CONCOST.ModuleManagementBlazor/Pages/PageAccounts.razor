@@ -291,19 +291,34 @@
 
             <div class="col-md-12">
                 <label class="form-label-bold">@Text["비밀번호|Password"] *</label>
-                <InputText type="password" class="form-control-custom" @bind-Value="_modelEdit.Password" placeholder="@Text["비밀번호|Password"]" />
+
+                <div class="password-input-wrap">
+                    <InputText type="@(_showPassword ? "text" : "password")"
+                               class="form-control-custom password-input"
+                               @bind-Value="_modelEdit.Password"
+                               placeholder="@Text["비밀번호|Password"]" />
+
+                    <button type="button"
+                            class="password-eye-btn"
+                            @onclick="TogglePasswordVisible">
+                        <i class="@(_showPassword ? "fa-solid fa-eye-slash" : "fa-solid fa-eye")"></i>
+                    </button>
+                </div>
+
                 <CustomValidationMessage For="@(() => _modelEdit.Password)" />
             </div>
 
             <div class="col-md-12">
                 <label class="form-label-bold">@Text["권한 그룹|Permission Group"] *</label>
-                <select class="form-select form-control-custom" @bind="_modelEdit.GuidPrimissions">
-                    <option value="">@Text["그룹 선택|Select Group"]</option>
-                    @foreach (var role in _optRoles)
-                    {
-                        <option value="@role.Value">@role.Text</option>
-                    }
-                </select>
+                <DropdownSelect TItem="OptionItem<Guid>"
+                                DataSource="@_optRoles"
+                                Value="_selectedPermissionRole"
+                                ValueChanged="OnPermissionRoleChanged"
+                                TextSelector="@(x => x.Text)"
+                                Placeholder="@Text["권한 그룹 선택|Select Permission Group"]"
+                                IconClass="fa-solid fa-hard-hat" DropdownPlacement="Top"
+                                WrapperClass="w-100"  />
+
                 <CustomValidationMessage For="@(() => _modelEdit.GuidPrimissions)" />
             </div>
         </div>
@@ -343,6 +358,35 @@
         gap: 16px;
         margin-bottom: 20px;
     }
+    .password-input-wrap {
+        position: relative;
+        width: 100%;
+    }
+
+        .password-input-wrap .password-input {
+            padding-right: 46px;
+        }
+
+    .password-eye-btn {
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        transform: translateY(-50%);
+        border: none;
+        background: transparent;
+        color: #6b7280;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .password-eye-btn:hover {
+            background: #f1f5f9;
+            color: #12345a;
+        }
 
     .account-summary-row {
         display: grid;
@@ -409,188 +453,204 @@
 </style>
 
 @code {
-	private const string AccountFilterAll = "All";
-	private const string AccountFilterNotCreated = "NotCreated";
-	private const string AccountFilterLocked = "Locked";
+    private const string AccountFilterAll = "All";
+    private const string AccountFilterNotCreated = "NotCreated";
+    private const string AccountFilterLocked = "Locked";
 
-	private IEnumerable<ModelAccountListItem> _dataSource = new List<ModelAccountListItem>();
-	private string _accountFilter = AccountFilterAll;
+    private IEnumerable<ModelAccountListItem> _dataSource = new List<ModelAccountListItem>();
+    private string _accountFilter = AccountFilterAll;
+    private OptionItem<Guid>? _selectedPermissionRole;
+    private ModelUserAccount _modelEdit = new();
+    private ModelPasswordChange _modelPwdChange = new();
+    private bool _showPassword = false;
+    private List<OptionItem<Guid>> _optRoles = new();
 
-	private ModelUserAccount _modelEdit = new();
-	private ModelPasswordChange _modelPwdChange = new();
+    private ModalComponent _modalEdit = default!;
+    private ModalComponent _modalPwd = default!;
 
-	private List<OptionItem<Guid>> _optRoles = new();
+    private bool _checkPermissionAdmin;
+    private bool _isLoading;
+    private string _modalEditTitle = string.Empty;
+    private void OnPermissionRoleChanged(OptionItem<Guid>? role)
+    {
+        _selectedPermissionRole = role;
+        _modelEdit.GuidPrimissions = role?.Value ?? Guid.Empty;
+    }
+    private IEnumerable<ModelAccountListItem> FilteredAccounts
+    {
+        get
+        {
+            if (_accountFilter == AccountFilterAll)
+            {
+                return _dataSource;
+            }
 
-	private ModalComponent _modalEdit = default!;
-	private ModalComponent _modalPwd = default!;
+            if (_accountFilter == AccountFilterNotCreated)
+            {
+                return _dataSource.Where(x => !x.HasUser);
+            }
 
-	private bool _checkPermissionAdmin;
-	private bool _isLoading;
-	private string _modalEditTitle = string.Empty;
+            if (_accountFilter == AccountFilterLocked)
+            {
+                return _dataSource.Where(x => x.HasUser && x.Active == false);
+            }
 
-	private IEnumerable<ModelAccountListItem> FilteredAccounts
-	{
-		get
-		{
-			if (_accountFilter == AccountFilterAll)
-			{
-				return _dataSource;
-			}
+            return _dataSource.Where(x => x.AccountType == _accountFilter);
+        }
+    }
 
-			if (_accountFilter == AccountFilterNotCreated)
-			{
-				return _dataSource.Where(x => !x.HasUser);
-			}
+    protected override async Task OnInitializedAsync()
+    {
+        _checkPermissionAdmin = await _svc.CheckPermissionAdmin();
 
-			if (_accountFilter == AccountFilterLocked)
-			{
-				return _dataSource.Where(x => x.HasUser && x.Active == false);
-			}
+        if (_checkPermissionAdmin)
+        {
+            await ResetData();
+        }
+    }
 
-			return _dataSource.Where(x => x.AccountType == _accountFilter);
-		}
-	}
+    private async Task ResetData()
+    {
+        try
+        {
+            _isLoading = true;
 
-	protected override async Task OnInitializedAsync()
-	{
-		_checkPermissionAdmin = await _svc.CheckPermissionAdmin();
+            var rsp = await AppStatic.CallApi(() => _svc.GetListAccounts());
 
-		if (_checkPermissionAdmin)
-		{
-			await ResetData();
-		}
-	}
+            if (!rsp.Success)
+            {
+                _ = swal.Error(rsp.Message);
+                return;
+            }
 
-	private async Task ResetData()
-	{
-		try
-		{
-			_isLoading = true;
+            _dataSource = rsp.Items ?? new List<ModelAccountListItem>();
 
-			var rsp = await AppStatic.CallApi(() => _svc.GetListAccounts());
+            var rsp2 = await AppStatic.CallApi(() => _svc.GetListRoles());
 
-			if (!rsp.Success)
-			{
-				_ = swal.Error(rsp.Message);
-				return;
-			}
+            if (!rsp2.Success)
+            {
+                _ = swal.Error(rsp2.Message);
+                return;
+            }
 
-			_dataSource = rsp.Items ?? new List<ModelAccountListItem>();
+            _optRoles = rsp2.Items?.ToList() ?? new List<OptionItem<Guid>>();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+    private void TogglePasswordVisible()
+    {
+        _showPassword = !_showPassword;
+    }
+    private void SetFilter(string filter)
+    {
+        _accountFilter = filter;
+    }
 
-			var rsp2 = await AppStatic.CallApi(() => _svc.GetListRoles());
+    private string GetTabClass(string filter)
+    {
+        return _accountFilter == filter
+            ? "account-tab active"
+            : "account-tab";
+    }
 
-			if (!rsp2.Success)
-			{
-				_ = swal.Error(rsp2.Message);
-				return;
-			}
+    private string GetAvatarText(ModelAccountListItem model)
+    {
+        if (model == null || string.IsNullOrWhiteSpace(model.DisplayName))
+        {
+            return "?";
+        }
 
-			_optRoles = rsp2.Items?.ToList() ?? new List<OptionItem<Guid>>();
-		}
-		finally
-		{
-			_isLoading = false;
-			StateHasChanged();
-		}
-	}
+        return model.DisplayName.Trim()[0].ToString().ToUpper();
+    }
 
-	private void SetFilter(string filter)
-	{
-		_accountFilter = filter;
-	}
+    private void ViewDetail(ModelAccountListItem model)
+    {
+        if (model == null)
+        {
+            return;
+        }
 
-	private string GetTabClass(string filter)
-	{
-		return _accountFilter == filter
-			? "account-tab active"
-			: "account-tab";
-	}
+        if (model.AccountType == BasicCodes.AccountType.Customer && model.CustomerGuid.HasValue)
+        {
+            NavigationManager.NavigateTo($"/admin/customers/detail/{model.CustomerGuid.Value}");
+            return;
+        }
 
-	private string GetAvatarText(ModelAccountListItem model)
-	{
-		if (model == null || string.IsNullOrWhiteSpace(model.DisplayName))
-		{
-			return "?";
-		}
+        if (model.AccountType == BasicCodes.AccountType.Employee && model.GuidEmployee.HasValue)
+        {
+            NavigationManager.NavigateTo($"/employee/profile/{model.GuidEmployee.Value}");
+            return;
+        }
 
-		return model.DisplayName.Trim()[0].ToString().ToUpper();
-	}
-
-	private void ViewDetail(ModelAccountListItem model)
-	{
-		if (model == null)
-		{
-			return;
-		}
-
-		if (model.AccountType == BasicCodes.AccountType.Customer && model.CustomerGuid.HasValue)
-		{
-			NavigationManager.NavigateTo($"/admin/customers/detail/{model.CustomerGuid.Value}");
-			return;
-		}
-
-		if (model.AccountType == BasicCodes.AccountType.Employee && model.GuidEmployee.HasValue)
-		{
-			NavigationManager.NavigateTo($"/employee/profile/{model.GuidEmployee.Value}");
-			return;
-		}
-
-		if (!string.IsNullOrWhiteSpace(model.UserName) && model.UserName != "-")
-		{
-			NavigationManager.NavigateTo($"/management/account");
-		}
-	}
+        if (!string.IsNullOrWhiteSpace(model.UserName) && model.UserName != "-")
+        {
+            NavigationManager.NavigateTo($"/management/account");
+        }
+    }
 
     private async Task  OpenCreateModal(ModelAccountListItem model)
-	{
-		if (model == null)
-		{
-			return;
-		}
+    {
+        if (model == null)
+        {
+            return;
+        }
 
-		if (model.AccountType != BasicCodes.AccountType.Employee)
-		{
-			_ = swal.Error(Text["임직원 계정만 여기에서 생성할 수 있습니다.|Only employee accounts can be created here."]);
-			return;
-		}
 
-		if (!model.GuidEmployee.HasValue)
-		{
-			_ = swal.Error(Text["직원 정보가 올바르지 않습니다.|Employee information is invalid."]);
-			return;
-		}
+        if (model.AccountType != BasicCodes.AccountType.Employee)
+        {
+            _ = swal.Error(Text["임직원 계정만 여기에서 생성할 수 있습니다.|Only employee accounts can be created here."]);
+            return;
+        }
 
-		_modelEdit = new ModelUserAccount
+        if (!model.GuidEmployee.HasValue)
+        {
+            _ = swal.Error(Text["직원 정보가 올바르지 않습니다.|Employee information is invalid."]);
+            return;
+        }
+
+        _modelEdit = new ModelUserAccount
         {
             GuidEmployee = model.GuidEmployee.Value,
             FirstName = model.FirstName,
             LastName = model.LastName,
             Email = model.Email,
             Phone = model.Phone,
-            UserName = string.Empty,
-            Password = string.Empty
+            UserName = model.Email,
+            Password = GenerateTemporaryPassword(),
         };
 
-		_modalEditTitle = Text["계정 생성|Create Account"];
-       await  _modalEdit.Show();
-	}
+        _modalEditTitle = Text["계정 생성|Create Account"];
+        await  _modalEdit.Show();
+    }
+    private string GenerateTemporaryPassword()
+    {
+        var randomCode = Guid.NewGuid()
+            .ToString("N")
+            .Substring(0, 6)
+            .ToUpperInvariant();
 
-	private async Task OpenChangePasswordModal(ModelAccountListItem model)
-	{
-		if (model == null || !model.HasUser)
-		{
-			return;
-		}
+        return $"Esc@{DateTime.Now:yyyy}{randomCode}";
+    }
+    private async Task OpenChangePasswordModal(ModelAccountListItem model)
+    {
+        if (model == null || !model.HasUser)
+        {
+            return;
+        }
 
-		_modelPwdChange = new ModelPasswordChange
+        _modelPwdChange = new ModelPasswordChange
         {
             UserName = model.UserName,
             Password = string.Empty,
             PasswordConfirm = string.Empty
         };
 
-		await  _modalPwd.Show();
-	}
+        await  _modalPwd.Show();
+    }
 
     private async Task OnFormEditSubmit()
     {
@@ -604,13 +664,13 @@
             return;
         }
 
-        _modalEdit.Show();
+        await _modalEdit.Show();
 
         await swal.Alert(
             Text["계정이 생성되었습니다.|Account has been created."],
             Text["완료|Success"]
         );
-
+        await _modalEdit.Close();
         await ResetData();
     }
 
