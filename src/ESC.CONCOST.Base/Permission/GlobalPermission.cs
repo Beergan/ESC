@@ -34,14 +34,14 @@ public class GlobalPermissions
 
             var permissionNo = Convert.ToInt64(Enum.Parse(enumType, functionName, false));
             var permissionValue = Convert.ToInt64(Math.Pow(2, permissionNo));
-            items.Add(new(permissionValue, funcAttribute.TextVi, funcAttribute.TextKo));
+            items.Add(new(permissionValue, funcAttribute.TextKo, funcAttribute.TextEn));
         }
 
         var feature = new FeatureModel 
         { 
             Name = featureAttribute.Name, 
-            TextVi = featureAttribute.TextVi,
-            TextKo = featureAttribute.TextKo 
+            TextKo = featureAttribute.TextKo,
+            TextEn = featureAttribute.TextEn 
         };
         GlobalPermissions.Add(feature, items.ToArray());
     }

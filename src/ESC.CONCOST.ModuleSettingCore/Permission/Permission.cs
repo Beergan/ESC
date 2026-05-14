@@ -3,7 +3,7 @@ using ESC.CONCOST.Abstract;
 
 namespace ESC.CONCOST.ModuleSettingCore;
 
-[Feature(Name = "ModuleSetting", TextEn = "", TextVi = "MODULE THIẾT LẬP", TextKo = "설정 모듈")]
+[Feature(Name = "ModuleSetting", TextKo = "설정 모듈", TextEn = "Setting Module")]
 public enum PERMISSION
 {
 

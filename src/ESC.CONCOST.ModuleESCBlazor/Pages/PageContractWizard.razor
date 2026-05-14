@@ -106,25 +106,28 @@
                             </button>
                         </div>
 
-                        @if (UploadedSampleFiles != null && UploadedSampleFiles.Any())
+                        @if (UploadedSampleFile != null)
                         {
-                            <div style="margin-top: 16px; background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid var(--border-color);">
-                                <h6 style="font-size: 13px; font-weight: 800; margin-bottom: 12px; color: #334155;">
-                                    @Text["업로드된 파일|Uploaded Files"] (@UploadedSampleFiles.Count)
+                            <div class="sample-file-panel">
+                                <h6 class="sample-file-title">
+                                    @Text["업로드된 파일|Uploaded File"]
                                 </h6>
-                                <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
-                                    @foreach (var file in UploadedSampleFiles)
-                                    {
-                                        <li style="font-size: 13px; color: var(--text-color); display: flex; align-items: center; gap: 10px; background: white; padding: 8px 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                                            <i class="fa-solid @(file.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ? "fa-file-pdf text-danger" : "fa-file-excel text-success")" style="font-size: 16px;"></i>
-                                            <span style="flex: 1; font-weight: 600;">@file.Name</span>
-                                            <span style="color: #94a3b8; font-size: 12px;">(@(file.Size / 1024) KB)</span>
-                                            <button type="button" style="background: none; border: none; color: #ef4444; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 4px;" @onclick="() => RemoveSampleFile(file)">
-                                                <i class="fa-solid fa-xmark"></i>
-                                            </button>
-                                        </li>
-                                    }
-                                </ul>
+
+                                <div class="sample-file-item">
+                                    <i class="fa-solid @(UploadedSampleFile.Extension == ".pdf" ? "fa-file-pdf text-danger" : "fa-file-excel text-success") sample-file-icon"></i>
+
+                                    <span class="sample-file-name">@UploadedSampleFile.Name</span>
+
+                                    <span class="sample-file-size">
+                                        (@(UploadedSampleFile.Size / 1024) KB)
+                                    </span>
+
+                                    <button type="button"
+                                            class="sample-file-remove"
+                                            @onclick="RemoveSampleFile">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
                             </div>
                         }
                     </div>
@@ -290,7 +293,7 @@
 
                     <div class="form-group half-width">
                         <label class="form-label">
-                            @Text[IsEditMode ? "수정 완료|Update" : "산출 시작|Complete & Save"] <span class="required">*</span>
+                            @Text["준공예정일|Completion Date"] <span class="required">*</span>
                         </label>
 
                         <InputDate @bind-Value="Model.CompletionDate"
@@ -401,11 +404,8 @@
                 }
                 else
                 {
-                    <button type="button"
+                    <button type="submit"
                             class="btn-action btn-success-custom"
-                            @onclick="HandleValidSubmit"
-                            @onclick:preventDefault="true"
-                            @onclick:stopPropagation="true"
                             disabled="@IsBusy">
                         @if (IsBusy)
                         {
@@ -416,7 +416,7 @@
                             <i class="fa-solid fa-check"></i>
                         }
 
-                        @Text["산출 시작|Complete & Save"]
+                        @Text[IsEditMode ? "수정 완료|Update Project" : "산출 시작|Complete & Save"]
                     </button>
                 }
             </div>
@@ -741,8 +741,22 @@
 
     private ContractCategory? SelectedContract { get; set; }
 
-    private List<IBrowserFile> UploadedSampleFiles { get; set; } = new();
+    private UploadedSampleFileInfo? UploadedSampleFile { get; set; }
 
+    private sealed class UploadedSampleFileInfo
+    {
+        public string Name { get; set; } = string.Empty;
+        public long Size { get; set; }
+        public string Extension { get; set; } = string.Empty;
+    }
+    private const long MaxSampleFileSize = 10 * 1024 * 1024; // 10MB
+
+    private static readonly HashSet<string> AllowedSampleExtensions = new(StringComparer.OrdinalIgnoreCase)
+{
+    ".pdf",
+    ".xls",
+    ".xlsx"
+};
     protected override async Task OnInitializedAsync()
     {
         await LoadInitialDataAsync();
@@ -902,7 +916,10 @@
 
     private async Task OnSampleFilesChanged(InputFileChangeEventArgs e)
     {
-        var maxFileSize = 10 * 1024 * 1024; // 10 MB
+        if (IsBusy)
+        {
+            return;
+        }
 
         var file = e.File;
 
@@ -911,30 +928,49 @@
             return;
         }
 
-        if (file.Size > maxFileSize)
+        var validationMessage = ValidateSampleFile(file);
+
+        if (!string.IsNullOrWhiteSpace(validationMessage))
         {
+            UploadedSampleFile = null;
+
             await Alert.Error(
-                Text["파일 크기는 10MB를 초과할 수 없습니다.|File size cannot exceed 10MB."],
+                validationMessage,
                 Text["오류|Error"]
             );
+
             return;
         }
 
-        var extension = Path.GetExtension(file.Name).ToLowerInvariant();
-
-        if (extension != ".xlsx" && extension != ".xls" && extension != ".pdf")
+        UploadedSampleFile = new UploadedSampleFileInfo
         {
-            await Alert.Error(
-                Text["PDF 또는 Excel 파일만 업로드할 수 있습니다.|Only PDF or Excel files can be uploaded."],
-                Text["오류|Error"]
-            );
-            return;
-        }
-
-        UploadedSampleFiles.Clear();
-        UploadedSampleFiles.Add(file);
+            Name = file.Name,
+            Size = file.Size,
+            Extension = Path.GetExtension(file.Name).ToLowerInvariant()
+        };
 
         await ReadSampleFileAsync(file);
+    }
+    private string ValidateSampleFile(IBrowserFile file)
+    {
+        if (file.Size <= 0)
+        {
+            return Text["빈 파일은 업로드할 수 없습니다.|Empty file cannot be uploaded."];
+        }
+
+        if (file.Size > MaxSampleFileSize)
+        {
+            return Text["파일 크기는 10MB를 초과할 수 없습니다.|File size cannot exceed 10MB."];
+        }
+
+        var extension = Path.GetExtension(file.Name);
+
+        if (string.IsNullOrWhiteSpace(extension) || !AllowedSampleExtensions.Contains(extension))
+        {
+            return Text["PDF 또는 Excel 파일만 업로드할 수 있습니다.|Only PDF or Excel files can be uploaded."];
+        }
+
+        return string.Empty;
     }
     private async Task ReadSampleFileAsync(IBrowserFile file)
     {
@@ -942,7 +978,7 @@
         {
             IsBusy = true;
 
-            await using var stream = file.OpenReadStream(10 * 1024 * 1024);
+            await using var stream = file.OpenReadStream(MaxSampleFileSize);
             using var memoryStream = new MemoryStream();
 
             await stream.CopyToAsync(memoryStream);
@@ -957,6 +993,8 @@
 
             if (result == null || !result.Success || result.Item == null)
             {
+                UploadedSampleFile = null;
+
                 await Alert.Error(
                     string.IsNullOrWhiteSpace(result?.Message)
                         ? Text["샘플 파일을 읽을 수 없습니다.|Cannot read sample file."]
@@ -974,8 +1012,19 @@
                 Text["샘플 데이터를 불러왔습니다.|Sample data has been loaded."]
             );
         }
+        catch (IOException)
+        {
+            UploadedSampleFile = null;
+
+            await Alert.Error(
+                Text["파일을 읽는 중 문제가 발생했습니다. 파일 크기 또는 형식을 확인하세요.|An error occurred while reading the file. Please check the file size or format."],
+                Text["오류|Error"]
+            );
+        }
         catch
         {
+            UploadedSampleFile = null;
+
             await Alert.Error(
                 Text["샘플 파일을 읽는 중 오류가 발생했습니다.|An error occurred while reading the sample file."],
                 Text["오류|Error"]
@@ -1028,63 +1077,31 @@
             Model.ContractMethod = SelectedContract.Name;
         }
     }
-    private void RemoveSampleFile(IBrowserFile file)
+    private void RemoveSampleFile()
     {
-        UploadedSampleFiles.Remove(file);
+        UploadedSampleFile = null;
     }
-
     private async Task DownloadExcelTemplate()
     {
-        try
-        {
-            // Determine which template to serve based on current language.
-            string fileUrl;
-            string fileName;
-
-            if (Text.IsKorean)
-            {
-                // Korean template
-                fileUrl = "/assets/sample/Template_ESC_Data_KR.xlsx";
-                fileName = "Template_ESC_Data_KR.xlsx";
-            }
-            else
-            {
-                // English template
-                fileUrl = "/assets/sample/Template_ESC_Data_EN.xlsx";
-                fileName = "Template_ESC_Data_EN.xlsx";
-            }
-
-            await JSRuntime.InvokeVoidAsync("uploadHelper.downloadFile", fileUrl, fileName);
-        }
-        catch (Exception ex)
-        {
-            await Alert.Error(
-                Text["다운로드 중 오류가 발생했습니다.|Error occurred during download."],
-                Text["오류|Error"]
-            );
-        }
+        await DownloadTemplateAsync("xlsx");
     }
+
     private async Task DownloadPdfTemplate()
+    {
+        await DownloadTemplateAsync("pdf");
+    }
+
+    private async Task DownloadTemplateAsync(string extension)
     {
         try
         {
-            // Select PDF template based on language
-            string fileUrl;
-            string fileName;
-            if (Text.IsKorean)
-            {
-                fileUrl = "/assets/sample/Template_ESC_Data_KR.pdf";
-                fileName = "Template_ESC_Data_KR.pdf";
-            }
-            else
-            {
-                fileUrl = "/assets/sample/Template_ESC_Data_EN.pdf";
-                fileName = "Template_ESC_Data_EN.pdf";
-            }
-            
+            var languageCode = Text.IsKorean ? "KR" : "EN";
+            var fileName = $"Template_ESC_Data_{languageCode}.{extension}";
+            var fileUrl = $"/assets/sample/{fileName}";
+
             await JSRuntime.InvokeVoidAsync("uploadHelper.downloadFile", fileUrl, fileName);
         }
-        catch (Exception ex)
+        catch
         {
             await Alert.Error(
                 Text["다운로드 중 오류가 발생했습니다.|Error occurred during download."],
@@ -1116,137 +1133,6 @@
         return validation.IsValid ? string.Empty : Text[validation.Message];
     }
 
-    private string ValidateStep1()
-    {
-        if (string.IsNullOrWhiteSpace(Model.ProjectName))
-        {
-            return Text["공사명을 입력하세요|Please enter Project Name"];
-        }
-
-        if (string.IsNullOrWhiteSpace(Model.Contractor))
-        {
-            return Text["시공사명을 입력하세요|Please enter Contractor"];
-        }
-
-        if (string.IsNullOrWhiteSpace(Model.Client))
-        {
-            return Text["발주처명을 입력하세요|Please enter Client"];
-        }
-
-        if (string.IsNullOrWhiteSpace(Model.WorkType))
-        {
-            return Text["공사 종류를 선택하세요|Please select Work Type"];
-        }
-
-        if (string.IsNullOrWhiteSpace(Model.ContractMethod))
-        {
-            return Text["계약방법을 선택하세요|Please select Contract Method"];
-        }
-
-        if (Model.BidRate <= 0)
-        {
-            return Text["낙찰율은 0보다 커야 합니다|Bid Rate must be greater than 0"];
-        }
-
-        if (Model.BidRate > 100)
-        {
-            return Text["낙찰율은 100%를 초과할 수 없습니다|Bid Rate cannot exceed 100%"];
-        }
-
-        return string.Empty;
-    }
-
-    private string ValidateStep2()
-    {
-        if (Model.ContractAmount <= 0)
-        {
-            return Text["계약금액을 입력하세요|Please enter Contract Amount"];
-        }
-
-        if (Model.AdvanceAmt < 0)
-        {
-            return Text["선금액은 0보다 작을 수 없습니다|Advance Payment cannot be less than 0"];
-        }
-
-        if (Model.AdvanceAmt > Model.ContractAmount)
-        {
-            return Text["선금액은 계약금액보다 클 수 없습니다|Advance Payment cannot exceed Contract Amount"];
-        }
-
-        if (!Model.ContractDate.HasValue)
-        {
-            return Text["계약체결일을 선택하세요|Please select Contract Date"];
-        }
-
-        if (!Model.BidDate.HasValue)
-        {
-            return Text["입찰일을 선택하세요|Please select Bid Date"];
-        }
-
-        if (!Model.StartDate.HasValue)
-        {
-            return Text["착공일을 선택하세요|Please select Start Date"];
-        }
-
-        if (!Model.CompletionDate.HasValue)
-        {
-            return Text["준공예정일을 선택하세요|Please select Completion Date"];
-        }
-
-        if (Model.CompletionDate.Value <= Model.StartDate.Value)
-        {
-            return Text["준공일은 착공일보다 늦어야 합니다|Completion Date must be after Start Date"];
-        }
-
-        if (Model.ContractDate.Value < Model.BidDate.Value)
-        {
-            return Text["계약체결일은 입찰일보다 빠를 수 없습니다|Contract Date cannot be earlier than Bid Date"];
-        }
-
-        return string.Empty;
-    }
-
-    private string ValidateStep3()
-    {
-        if (!Model.CompareDate.HasValue)
-        {
-            return Text["조정기준일을 선택하세요|Please select Adjustment Base Date"];
-        }
-
-        if (Model.ThresholdRate <= 0)
-        {
-            return Text["등락율 기준은 0보다 커야 합니다|Fluctuation Rate must be greater than 0"];
-        }
-
-        if (Model.ThresholdDays <= 0)
-        {
-            return Text["경과기간 기준은 0보다 커야 합니다|Time Threshold must be greater than 0"];
-        }
-
-        if (Model.ExcludedAmt < 0)
-        {
-            return Text["적용제외금액은 0보다 작을 수 없습니다|Exclusion Amount cannot be less than 0"];
-        }
-
-        if (Model.CompareDate.HasValue && Model.BidDate.HasValue)
-        {
-            var diffDays = (Model.CompareDate.Value.Date - Model.BidDate.Value.Date).Days;
-
-            if (diffDays < Model.ThresholdDays)
-            {
-                return Text[
-                    $"경과기간이 {diffDays}일입니다. 조정기준일은 입찰일로부터 {Model.ThresholdDays}일 이상이어야 합니다.|The elapsed period is {diffDays} days. The adjustment base date must be at least {Model.ThresholdDays} days after the bid date."
-                ];
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(Model.PreviousMonth) && !IsValidYearMonth(Model.PreviousMonth))
-        {
-            return Text["직전연월 형식은 YYYY-MM 이어야 합니다|Previous Month format must be YYYY-MM"];
-        }
-
-        return string.Empty;
-    }
 
     private static bool IsValidYearMonth(string value)
     {
@@ -1263,35 +1149,6 @@
             out _
         );
     }
-
-    private void LoadSample()
-    {
-        Model = new ContractWizardDto
-        {
-            ProjectName = "조천정수장 고도정수처리시설 전기공사",
-            Contractor = "컨코스트 건설",
-            Client = "한국수자원공사",
-            WorkType = "전기",
-            ContractMethod = "계속비",
-            BidRate = 87.50m,
-            PreparedBy = "주식회사 컨코스트",
-            ContractAmount = 1250000000,
-            AdvanceAmt = 0,
-            ContractDate = new DateTime(2024, 1, 15),
-            BidDate = new DateTime(2023, 12, 10),
-            StartDate = new DateTime(2024, 2, 1),
-            CompletionDate = new DateTime(2025, 2, 1),
-            CompareDate = new DateTime(2024, 8, 1),
-            ThresholdRate = 3.0m,
-            ThresholdDays = 90,
-            ExcludedAmt = 0,
-            PreviousMonth = "2024-07"
-        };
-
-        SelectedCategory = ActiveCategories.FirstOrDefault(x => x.Name == Model.WorkType);
-        SelectedContract = ActiveContracts.FirstOrDefault(x => x.Name == Model.ContractMethod);
-    }
-
     private async Task HandleValidSubmit()
     {
         if (IsBusy)
@@ -1299,9 +1156,18 @@
             return;
         }
 
+        var originalStep = CurrentStep;
+
         try
         {
             IsBusy = true;
+
+            CurrentStep = 3;
+
+            if (!await ValidateCurrentStepAsync())
+            {
+                return;
+            }
 
             ResultOf<Contract> result;
 
@@ -1335,8 +1201,16 @@
 
             Navigation.NavigateTo("/escalation");
         }
+        catch
+        {
+            await Alert.Error(
+                Text["저장 중 오류가 발생했습니다.|An error occurred while saving."],
+                Text["오류|Error"]
+            );
+        }
         finally
         {
+            CurrentStep = originalStep;
             IsBusy = false;
         }
     }

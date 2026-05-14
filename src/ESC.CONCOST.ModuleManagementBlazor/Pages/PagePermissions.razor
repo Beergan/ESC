@@ -7,10 +7,9 @@
 @inject FieldExtractor<ModelPermissionsAccount> field1
 @inject ITextTranslator Text
 @using System.Diagnostics
-@inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
 @using ESC.CONCOST.SharedComponents.Components
-
+@inject IJSRuntime JSRuntime
 <div class="erp-container">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="erp-page-title">
@@ -35,7 +34,7 @@
                         @foreach (var item in _listRoles.EmptyIfNull())
                         {
                             <div class="erp-role-item @(_selectedRoleId == item.Id ? "active" : "")"
-                                 @onclick="() => GroupSelected(item.Id)">
+                                 @onclick="async () => await GroupSelectedAsync(item.Id)">
                                 <span class="role-name">@item.Name</span>
                                 @if (item.Id != "fab4fac1-c546-41de-aebc-a14da6895711")
                                 {
@@ -90,7 +89,7 @@
 
                                         <div class="erp-permission-box">
                                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                                <div class="erp-module-badge">@Text[item.Key.TextVi, item.Key.TextKo]</div>
+                                                <div class="erp-module-badge">@Text[item.Key.TextKo, item.Key.TextEn]</div>
                                                 @if (_selectedRoleId != "fab4fac1-c546-41de-aebc-a14da6895711")
                                                 {
                                                     <button class="btn btn-sm btn-link text-decoration-none fw-bold p-0" style="font-size: 11px;" @onclick="@(() => ToggleSelectAll(item.Key.Name, idx))">
@@ -245,12 +244,17 @@
     {
         _checkPermissionAdmin = await _svc.CheckPermissionAdmin();
 
-        if (_checkPermissionAdmin)
+        if (!_checkPermissionAdmin)
         {
-            _listPermissions = await _svcBa.GetListPermissions();
-            _selectedRoleId = NavigationManager.Uri.GetAfter("#");
-            await RereshData();
+            return;
         }
+
+        _listPermissions = await _svcBa.GetListPermissions();
+
+        var hash = NavigationManager.Uri.GetAfter("#");
+        _selectedRoleId = string.IsNullOrWhiteSpace(hash) ? string.Empty : hash;
+
+        await RefreshDataAsync();
     }
 
     private async Task OnFormSubmit()
@@ -262,7 +266,7 @@
             return;
         }
         await _modalRole.Close();
-        await RereshData();
+        await RefreshDataAsync();
     }
 
     private async Task OnFormSubmitAddUser()
@@ -274,22 +278,22 @@
             return;
         }
         await _modalAddUser.Close();
-        await RereshData();
+        await RefreshDataAsync();
     }
 
-    private void NewAccount_Click()
+    private async Task NewAccount_Click()
     {
         _modalTitle = Text["계정 추가|Add Account"];
         _searchUser = "";
         _selectedUserIds.Clear();
-        _modalAddUser.Show();
+        await _modalAddUser.Show();
     }
 
-    private void NewPermission_Click()
+    private async Task NewPermission_Click()
     {
         _modalTitle = Text["권한 그룹 추가|Add Permission Group"];
         _model = new();
-        _modalRole.Show();
+        await _modalRole.Show();
     }
 
     private async Task UpdatePermission_Click()
@@ -300,34 +304,103 @@
             _ = swal.Error(rsp.Message);
             return;
         }
-        await RereshData();
+        await RefreshDataAsync();
         _ = swal.Alert(Text["권한 설정이 저장되었습니다.|Permissions updated successfully."]);
     }
 
-    private async Task RereshData()
+    private async Task RefreshDataAsync()
     {
         var rsp = await AppStatic.CallApi(() => _svc.GetListRoles());
+
         if (!rsp.Success)
         {
             _ = swal.Error(rsp.Message);
             return;
         }
 
-        _listRoles = rsp.Items;
+        _listRoles = rsp.Items?.ToList() ?? new List<ModelRole>();
 
-        if (_listRoles != null && _listRoles.Any())
+        if (_listRoles.Any())
         {
-            var check = _listRoles.FirstOrDefault(x => x.Id == _selectedRoleId);
-            if (check == null)
-                GroupSelected(_listRoles.ElementAt(0).Id);
-            else
-                GroupSelected(_selectedRoleId);
+            var roleId = _listRoles.Any(x => x.Id == _selectedRoleId)
+                ? _selectedRoleId
+                : _listRoles.First().Id;
+
+            await GroupSelectedAsync(roleId, updateUrl: false);
         }
 
         StateHasChanged();
     }
+    private async Task GroupSelectedAsync(string roleId, bool updateUrl = true)
+    {
+        if (string.IsNullOrWhiteSpace(roleId))
+        {
+            return;
+        }
 
-    private async void GroupSelected(string roleId)
+        if (_listRoles == null || !_listRoles.Any())
+        {
+            return;
+        }
+
+        if (updateUrl)
+        {
+            var currentUri = NavigationManager.Uri.GetBefore("#");
+            NavigationManager.NavigateTo($"{currentUri}#{roleId}", replace: true);
+        }
+
+        _selectedRoleId = roleId;
+
+        var role = _listRoles.FirstOrDefault(x => x.Id == roleId);
+
+        if (role == null)
+        {
+            _selectedRoleName = string.Empty;
+            _permission.Clear();
+            _listRolesAccount = new List<ModelPermissionsAccount>();
+            _listRolesActive = new List<ModelPermissionsAccount>();
+            return;
+        }
+
+        _selectedRoleName = role.Name ?? string.Empty;
+
+        var lstRoleClaims = await _svc.GetListRoleClaims(roleId);
+
+        _permission.Clear();
+
+        foreach (var item in _listPermissions)
+        {
+            var claimValue = 0L;
+
+            if (lstRoleClaims != null && lstRoleClaims.ContainsKey(item.Key.Name))
+            {
+                claimValue = lstRoleClaims[item.Key.Name];
+            }
+
+            var modulePermission = new MyDictionary<long, bool>();
+
+            foreach (var funcPermission in item.Value)
+            {
+                modulePermission.Add(
+                    funcPermission.Item1,
+                    (claimValue & funcPermission.Item1) == funcPermission.Item1
+                );
+            }
+
+            _permission[item.Key.Name] = modulePermission;
+        }
+
+        _listRolesAccount = await _svc.GetListRoleAccount(roleId)
+            ?? new List<ModelPermissionsAccount>();
+
+        _listRolesActive = await _svc.GetListUserActive(roleId)
+            ?? new List<ModelPermissionsAccount>();
+
+        _selectedUserIds.Clear();
+
+        StateHasChanged();
+    }
+    private async Task RefreshDataAsync(string roleId)
     {
         var currentUri = NavigationManager.Uri.GetBefore("#");
         await JSRuntime.InvokeVoidAsync("update_url", currentUri + "#" + roleId);
@@ -397,13 +470,13 @@
         }
     }
 
-    private void ModifyRoles(string id)
+    private async Task ModifyRoles(string id)
     {
         var item = _listRoles.Single(x => x.Id == id);
         _model.Id = id;
         _model.Name = item.Name;
         _modalTitle = Text["권한 그룹 수정|Edit Permission Group"];
-        _modalRole.Show();
+        await _modalRole.Show();
     }
 
     private async Task DeleteRoles(string id)
@@ -417,7 +490,7 @@
             _ = swal.Error(rsp.Message);
             return;
         }
-        await RereshData();
+        await RefreshDataAsync(_selectedRoleId);
     }
 
     private async Task DeleteUserRole(string userId)
@@ -431,7 +504,7 @@
             _ = swal.Error(rsp.Message);
             return;
         }
-        await RereshData();
+        await RefreshDataAsync();
     }
 
     private void ToggleUserSelection(string userId, ChangeEventArgs e)
