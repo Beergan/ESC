@@ -4,6 +4,7 @@ using ESC.CONCOST.Db.DbMssql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ESC.CONCOST.Db.Migrations
 {
     [DbContext(typeof(DbMssqlContext))]
-    partial class DbMssqlContextModelSnapshot : ModelSnapshot
+    [Migration("20260514083227_20260514153215")]
+    partial class _20260514153215
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -757,180 +760,6 @@ namespace ESC.CONCOST.Db.Migrations
                     b.ToTable("SETTING_PERMISSION");
                 });
 
-            modelBuilder.Entity("ESC.CONCOST.Abstract.EscFormulaField", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnOrder(1);
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("DateCreated")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("DateModified")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DefaultValue")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)")
-                        .HasColumnName("default_value");
-
-                    b.Property<string>("FieldKey")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
-                        .HasColumnName("field_key");
-
-                    b.Property<string>("FieldType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
-                        .HasColumnName("field_type");
-
-                    b.Property<int>("FormulaSettingId")
-                        .HasColumnType("int")
-                        .HasColumnName("formula_setting_id");
-
-                    b.Property<Guid>("Guid")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
-                        .HasColumnOrder(2);
-
-                    b.Property<bool>("IsReadonly")
-                        .HasColumnType("bit")
-                        .HasColumnName("is_readonly");
-
-                    b.Property<bool>("IsRequired")
-                        .HasColumnType("bit")
-                        .HasColumnName("is_required");
-
-                    b.Property<string>("LabelEn")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("label_en");
-
-                    b.Property<string>("LabelKo")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("label_ko");
-
-                    b.Property<string>("Placeholder")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("placeholder");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int")
-                        .HasColumnName("sort_order");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
-                        .HasColumnName("unit");
-
-                    b.Property<bool>("UseInFormula")
-                        .HasColumnType("bit")
-                        .HasColumnName("use_in_formula");
-
-                    b.Property<string>("UserCreated")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("UserModified")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal?>("ValidationMax")
-                        .HasColumnType("decimal(18,6)")
-                        .HasColumnName("validation_max");
-
-                    b.Property<decimal?>("ValidationMin")
-                        .HasColumnType("decimal(18,6)")
-                        .HasColumnName("validation_min");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("Guid");
-
-                    b.HasIndex("FormulaSettingId");
-
-                    b.ToTable("ESC_FORMULA_FIELDS");
-                });
-
-            modelBuilder.Entity("ESC.CONCOST.Abstract.EscFormulaFieldOption", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnOrder(1);
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("DateCreated")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("DateModified")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("FormulaFieldId")
-                        .HasColumnType("int")
-                        .HasColumnName("formula_field_id");
-
-                    b.Property<Guid>("Guid")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
-                        .HasColumnOrder(2);
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit")
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("OptionTextEn")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("option_text_en");
-
-                    b.Property<string>("OptionTextKo")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("option_text_ko");
-
-                    b.Property<string>("OptionValue")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("option_value");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int")
-                        .HasColumnName("sort_order");
-
-                    b.Property<string>("UserCreated")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("UserModified")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("Guid");
-
-                    b.HasIndex("FormulaFieldId");
-
-                    b.ToTable("ESC_FORMULA_FIELD_OPTIONS");
-                });
-
             modelBuilder.Entity("ESC.CONCOST.Abstract.EscFormulaSetting", b =>
                 {
                     b.Property<int>("Id")
@@ -940,9 +769,15 @@ namespace ESC.CONCOST.Db.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<bool>("AllowNegativeResult")
+                    b.Property<bool>("AllowDecreaseAdjustment")
                         .HasColumnType("bit")
-                        .HasColumnName("allow_negative_result");
+                        .HasColumnName("allow_decrease_adjustment");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("code");
 
                     b.Property<DateTime>("DateCreated")
                         .HasColumnType("datetime2");
@@ -950,39 +785,11 @@ namespace ESC.CONCOST.Db.Migrations
                     b.Property<DateTime>("DateModified")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("DecimalPlaces")
-                        .HasColumnType("int")
-                        .HasColumnName("decimal_places");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)")
-                        .HasColumnName("description");
-
-                    b.Property<string>("FormulaCode")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
-                        .HasColumnName("formula_code");
-
                     b.Property<string>("FormulaExpression")
                         .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)")
                         .HasColumnName("formula_expression");
-
-                    b.Property<string>("FormulaName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("formula_name");
-
-                    b.Property<string>("FormulaNameEn")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)")
-                        .HasColumnName("formula_name_en");
 
                     b.Property<Guid>("Guid")
                         .ValueGeneratedOnAdd()
@@ -997,15 +804,43 @@ namespace ESC.CONCOST.Db.Migrations
                         .HasColumnType("bit")
                         .HasColumnName("is_default");
 
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("name_en");
+
+                    b.Property<string>("NameKo")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)")
+                        .HasColumnName("name_ko");
+
+                    b.Property<int?>("ParentFormulaId")
+                        .HasColumnType("int")
+                        .HasColumnName("parent_formula_id");
+
                     b.Property<string>("RoundingMethod")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)")
                         .HasColumnName("rounding_method");
 
-                    b.Property<int>("SortOrder")
+                    b.Property<int>("ThresholdDays")
                         .HasColumnType("int")
-                        .HasColumnName("sort_order");
+                        .HasColumnName("threshold_days");
+
+                    b.Property<decimal>("ThresholdRate")
+                        .HasColumnType("decimal(18,6)")
+                        .HasColumnName("threshold_rate");
+
+                    b.Property<bool>("UseAdvanceDeduction")
+                        .HasColumnType("bit")
+                        .HasColumnName("use_advance_deduction");
+
+                    b.Property<bool>("UseOtherDeduction")
+                        .HasColumnType("bit")
+                        .HasColumnName("use_other_deduction");
 
                     b.Property<string>("UserCreated")
                         .IsRequired()
@@ -1015,9 +850,15 @@ namespace ESC.CONCOST.Db.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("Version")
+                        .HasColumnType("int")
+                        .HasColumnName("version");
+
                     b.HasKey("Id");
 
                     b.HasAlternateKey("Guid");
+
+                    b.HasIndex("ParentFormulaId");
 
                     b.ToTable("ESC_FORMULA_SETTINGS");
                 });
@@ -1651,26 +1492,13 @@ namespace ESC.CONCOST.Db.Migrations
                     b.Navigation("IndexType");
                 });
 
-            modelBuilder.Entity("ESC.CONCOST.Abstract.EscFormulaField", b =>
+            modelBuilder.Entity("ESC.CONCOST.Abstract.EscFormulaSetting", b =>
                 {
-                    b.HasOne("ESC.CONCOST.Abstract.EscFormulaSetting", "FormulaSetting")
-                        .WithMany("Fields")
-                        .HasForeignKey("FormulaSettingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.HasOne("ESC.CONCOST.Abstract.EscFormulaSetting", "ParentFormula")
+                        .WithMany()
+                        .HasForeignKey("ParentFormulaId");
 
-                    b.Navigation("FormulaSetting");
-                });
-
-            modelBuilder.Entity("ESC.CONCOST.Abstract.EscFormulaFieldOption", b =>
-                {
-                    b.HasOne("ESC.CONCOST.Abstract.EscFormulaField", "FormulaField")
-                        .WithMany("Options")
-                        .HasForeignKey("FormulaFieldId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("FormulaField");
+                    b.Navigation("ParentFormula");
                 });
 
             modelBuilder.Entity("ESC.CONCOST.Abstract.EscServiceRequest", b =>
@@ -1778,16 +1606,6 @@ namespace ESC.CONCOST.Db.Migrations
             modelBuilder.Entity("ESC.CONCOST.Abstract.Customer", b =>
                 {
                     b.Navigation("Contracts");
-                });
-
-            modelBuilder.Entity("ESC.CONCOST.Abstract.EscFormulaField", b =>
-                {
-                    b.Navigation("Options");
-                });
-
-            modelBuilder.Entity("ESC.CONCOST.Abstract.EscFormulaSetting", b =>
-                {
-                    b.Navigation("Fields");
                 });
 
             modelBuilder.Entity("ESC.CONCOST.Abstract.IndexType", b =>

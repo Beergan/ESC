@@ -350,4 +350,200 @@ public static class BasicCodes
             };
         }
     }
+    public static class EscIndexGroup
+    {
+        public const string All = "ALL";
+        public const string Labor = "LABOR";
+        public const string Safety = "SAFETY";
+        public const string Material = "MATERIAL";
+        public const string StandardMarket = "STANDARD_MARKET";
+        public const string Preparation = "PREPARATION";
+
+        public static readonly string[] AllCodes =
+        {
+            Labor,
+            Safety,
+            Material,
+            StandardMarket,
+            Preparation
+        };
+
+        public static string GetNameKo(string code)
+        {
+            return code switch
+            {
+                All => "전체",
+                Labor => "노무비",
+                Safety => "보안/안전",
+                Material => "재료비",
+                StandardMarket => "표준시장단가",
+                Preparation => "준비",
+                _ => code
+            };
+        }
+
+        public static string GetNameEn(string code)
+        {
+            return code switch
+            {
+                All => "All",
+                Labor => "Labor Cost",
+                Safety => "Safety / Security",
+                Material => "Material Cost",
+                StandardMarket => "Standard Market Unit Price",
+                Preparation => "Preparation",
+                _ => code
+            };
+        }
+    }
+
+    public static class EscIndexValueType
+    {
+        public const string Value = "VALUE";
+        public const string Ppi = "PPI";
+        public const string Rate = "RATE";
+        public const string Standard = "STANDARD";
+
+        public static readonly string[] All =
+        {
+            Value,
+            Ppi,
+            Rate,
+            Standard
+        };
+
+        public static bool IsValid(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) && All.Contains(value);
+        }
+
+        public static string GetNameKo(string value)
+        {
+            return value switch
+            {
+                Value => "값형",
+                Ppi => "PPI형",
+                Rate => "요율형",
+                Standard => "지수형",
+                _ => value
+            };
+        }
+
+        public static string GetNameEn(string value)
+        {
+            return value switch
+            {
+                Value => "Value Type",
+                Ppi => "PPI Type",
+                Rate => "Rate Type",
+                Standard => "Index Type",
+                _ => value
+            };
+        }
+    }
+
+    public static class EscFormulaCodes
+    {
+        public const string DefaultEsc = "DEFAULT_ESC";
+    }
+
+
+    public static class EscFormulaVariables
+    {
+        public const string ContractAmount = "ContractAmount";
+        public const string ExcludedAmount = "ExcludedAmount";
+        public const string AdjustmentRate = "AdjustmentRate";
+        public const string AdvanceAmount = "AdvanceAmount";
+        public const string OtherDeduction = "OtherDeduction";
+
+        public static readonly string[] All =
+        {
+            ContractAmount,
+            ExcludedAmount,
+            AdjustmentRate,
+            AdvanceAmount,
+            OtherDeduction
+        };
+    }
+    public static class EscFormulaFieldType
+    {
+        public const string Text = "TEXT";
+        public const string Number = "NUMBER";
+        public const string Decimal = "DECIMAL";
+        public const string Money = "MONEY";
+        public const string Percent = "PERCENT";
+        public const string Date = "DATE";
+        public const string Select = "SELECT";
+        public const string Boolean = "BOOLEAN";
+
+        public static readonly string[] All =
+        {
+        Text,
+        Number,
+        Decimal,
+        Money,
+        Percent,
+        Date,
+        Select,
+        Boolean
+    };
+
+        public static bool IsValid(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) && All.Contains(value);
+        }
+
+        public static string GetNameKo(string value)
+        {
+            return value switch
+            {
+                Text => "텍스트",
+                Number => "정수",
+                Decimal => "소수",
+                Money => "금액",
+                Percent => "퍼센트",
+                Date => "날짜",
+                Select => "선택",
+                Boolean => "예/아니오",
+                _ => value
+            };
+        }
+
+        public static string GetNameEn(string value)
+        {
+            return value switch
+            {
+                Text => "Text",
+                Number => "Number",
+                Decimal => "Decimal",
+                Money => "Money",
+                Percent => "Percent",
+                Date => "Date",
+                Select => "Select",
+                Boolean => "Boolean",
+                _ => value
+            };
+        }
+    }
+
+    public static class EscFormulaRounding
+    {
+        public const string Round = "ROUND";
+        public const string Floor = "FLOOR";
+        public const string Ceiling = "CEILING";
+        public const string None = "NONE";
+
+        public static readonly string[] All =
+        {
+        Round,
+        Floor,
+        Ceiling,
+        None
+    };
+
+        public static bool IsValid(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) && All.Contains(value);
+        }
+    }
 }

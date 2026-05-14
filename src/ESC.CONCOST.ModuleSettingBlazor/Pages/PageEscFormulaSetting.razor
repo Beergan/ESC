@@ -1,0 +1,2014 @@
+@page "/management/esc-formula-setting"
+
+@inject ITextTranslator Text
+@inject IEscFormulaSettingService FormulaService
+
+@using ESC.CONCOST.Abstract
+@using ESC.CONCOST.ModuleSettingCore
+@using ESC.CONCOST.SharedComponents.Components
+
+<div class="esc-formula-page">
+    <div class="esc-formula-hero">
+        <div class="esc-formula-hero-left">
+            <div class="esc-formula-kicker">
+                <i class="fa-solid fa-calculator"></i>
+                @Text["관리자 설정|Admin Setting"]
+            </div>
+
+            <h2>@Text["ESC 계산식 설정|ESC Formula Builder"]</h2>
+
+            <p>
+                @Text["관리자가 계산식, 입력 필드, 테스트 값을 순서대로 구성할 수 있습니다.|Admin can configure formulas, input fields and test values step by step."]
+            </p>
+
+            <div class="esc-formula-current">
+                <span>@Text["현재 선택|Current"]</span>
+                <strong>@(_selectedFormula?.FormulaCode ?? "-")</strong>
+
+                @if (_selectedFormula?.IsDefault == true)
+                {
+                    <em class="esc-status esc-status-primary">Default</em>
+                }
+
+                @if (_selectedFormula?.IsActive == true)
+                {
+                    <em class="esc-status esc-status-success">Active</em>
+                }
+                else if (_selectedFormula != null)
+                {
+                    <em class="esc-status esc-status-muted">Inactive</em>
+                }
+            </div>
+        </div>
+
+        <div class="esc-formula-hero-actions">
+            <button class="btn esc-btn-primary" @onclick="CreateFormula">
+                <i class="fa-solid fa-plus"></i>
+                @Text["새 계산식|New Formula"]
+            </button>
+
+            <button class="btn esc-btn-outline" @onclick="DuplicateFormula">
+                <i class="fa-solid fa-copy"></i>
+                @Text["복사 생성|Duplicate"]
+            </button>
+
+            <button class="btn esc-btn-outline"
+                    disabled="@(_selectedFormula == null || _selectedFormula.IsDefault || !_selectedFormula.IsActive)"
+                    @onclick="() => SetDefaultAsync(_selectedFormulaGuid ?? Guid.Empty)">
+                <i class="fa-solid fa-star"></i>
+                @Text["기본값 설정|Set Default"]
+            </button>
+
+            <button class="btn esc-btn-outline" @onclick="LoadAsync">
+                <i class="fa-solid fa-rotate"></i>
+                @Text["새로고침|Refresh"]
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_success ? "alert-success" : "alert-danger") esc-formula-alert">
+            @_message
+        </div>
+    }
+
+    <div class="esc-formula-shell">
+        <aside class="esc-formula-library">
+            <div class="esc-panel-title-row">
+                <div>
+                    <h3>@Text["계산식 목록|Formula Library"]</h3>
+                    <p>@Text["등록된 계산식을 선택하세요.|Select a formula."]</p>
+                </div>
+                <span class="esc-count">@_formulas.Count</span>
+            </div>
+
+            <div class="esc-search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input class="form-control"
+                       placeholder="@Text["코드/이름 검색|Search code/name"]"
+                       @bind="_searchKeyword"
+                       @bind:event="oninput" />
+            </div>
+
+            @if (_loading)
+            {
+                <div class="esc-empty-state">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                    <span>@Text["불러오는 중입니다...|Loading..."]</span>
+                </div>
+            }
+            else if (FilteredFormulas.Count == 0)
+            {
+                <div class="esc-empty-state">
+                    <i class="fa-regular fa-folder-open"></i>
+                    <span>@Text["등록된 계산식이 없습니다.|No formulas found."]</span>
+                </div>
+            }
+            else
+            {
+                <div class="esc-formula-list">
+                    @foreach (var item in FilteredFormulas)
+                    {
+                        <button type="button"
+                                class="esc-formula-card @(item.Guid == _selectedFormulaGuid ? "active" : "")"
+                                @onclick="() => SelectFormulaAsync(item.Guid)">
+                            <div class="esc-formula-card-head">
+                                <div>
+                                    <strong>@item.FormulaName</strong>
+                                    <small>@item.FormulaNameEn</small>
+                                </div>
+
+                                <div class="esc-card-badges">
+                                    @if (item.IsDefault)
+                                    {
+                                        <span class="esc-status esc-status-primary">Default</span>
+                                    }
+
+                                    @if (item.IsActive)
+                                    {
+                                        <span class="esc-status esc-status-success">Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="esc-status esc-status-muted">Inactive</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="esc-formula-card-meta">
+                                <span><i class="fa-solid fa-code"></i> @item.FormulaCode</span>
+                                <span><i class="fa-solid fa-arrow-down-1-9"></i> @item.SortOrder</span>
+                            </div>
+
+                            <div class="esc-formula-card-expression">
+                                @ShortExpression(item.FormulaExpression)
+                            </div>
+                        </button>
+                    }
+                </div>
+            }
+        </aside>
+
+        <main class="esc-formula-workspace">
+            <div class="esc-stepper">
+                <button class="esc-step @StepClass(1)" @onclick="() => GoStep(1)">
+                    <span>1</span>
+                    <div>
+                        <strong>@Text["기본 정보|Basic Info"]</strong>
+                        <small>@Text["계산식 이름/옵션|Name & options"]</small>
+                    </div>
+                </button>
+
+                <button class="esc-step @StepClass(2)" @onclick="() => GoStep(2)">
+                    <span>2</span>
+                    <div>
+                        <strong>@Text["입력 필드|Input Fields"]</strong>
+                        <small>@Text["변수/타입 설정|Variables & types"]</small>
+                    </div>
+                </button>
+
+                <button class="esc-step @StepClass(3)" @onclick="() => GoStep(3)">
+                    <span>3</span>
+                    <div>
+                        <strong>@Text["계산식 작성|Expression"]</strong>
+                        <small>@Text["변수로 공식 작성|Build formula"]</small>
+                    </div>
+                </button>
+
+                <button class="esc-step @StepClass(4)" @onclick="() => GoStep(4)">
+                    <span>4</span>
+                    <div>
+                        <strong>@Text["테스트 및 적용|Test & Apply"]</strong>
+                        <small>@Text["결과 확인|Verify result"]</small>
+                    </div>
+                </button>
+            </div>
+
+            @if (_currentStep == 1)
+            {
+                <EditForm Model="_formulaEdit" OnValidSubmit="SaveFormulaAsync">
+                    <DataAnnotationsValidator />
+
+                    <section class="esc-card">
+                        <div class="esc-card-header">
+                            <div>
+                                <h3>@Text["1. 기본 정보|1. Basic Information"]</h3>
+                                <p>@Text["계산식의 기본 이름, 코드, 반올림 방식을 설정합니다.|Set formula name, code and rounding options."]</p>
+                            </div>
+                        </div>
+
+                        @if (_formulaEdit.IsDefault)
+                        {
+                            <div class="esc-warning-box">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <span>
+                                    @Text["현재 기본 계산식입니다. 수정 시 신규 계산 결과에 영향을 줄 수 있습니다.|This is the default formula. Changes may affect new calculations."]
+                                </span>
+                            </div>
+                        }
+
+                        <div class="row g-3">
+                            <div class="col-lg-6">
+                                <label class="esc-label">@Text["계산식 코드|Formula Code"] <b>*</b></label>
+                                <InputText class="form-control esc-input" @bind-Value="_formulaEdit.FormulaCode" />
+                                <div class="esc-help">
+                                    @Text["영문, 숫자, 밑줄만 권장합니다. 예: DEFAULT_ESC|Use letters, numbers and underscore. Example: DEFAULT_ESC"]
+                                </div>
+                            </div>
+
+                            <div class="col-lg-6">
+                                <label class="esc-label">@Text["정렬 순서|Sort Order"]</label>
+                                <InputNumber class="form-control esc-input" @bind-Value="_formulaEdit.SortOrder" />
+                            </div>
+
+                            <div class="col-lg-6">
+                                <label class="esc-label">@Text["이름(한국어)|Name Korean"] <b>*</b></label>
+                                <InputText class="form-control esc-input" @bind-Value="_formulaEdit.FormulaName" />
+                            </div>
+
+                            <div class="col-lg-6">
+                                <label class="esc-label">@Text["이름(영어)|Name English"]</label>
+                                <InputText class="form-control esc-input" @bind-Value="_formulaEdit.FormulaNameEn" />
+                            </div>
+
+                            <div class="col-lg-6">
+                                <label class="esc-label">@Text["반올림 방식|Rounding Method"]</label>
+                                <DropdownSelect TItem="OptionItem<string>"
+                                                DataSource="@_optRounding"
+                                                Value="@(_optRounding.FirstOrDefault(x => x.Value == _formulaEdit.RoundingMethod))"
+                                                ValueChanged="OnRoundingChanged"
+                                                TextSelector="x => x.Text"
+                                                Placeholder="@Text["반올림 방식 선택|Select Rounding"]"
+                                                IconClass="fa-solid fa-divide"
+                                                WrapperClass="w-100" />
+                            </div>
+
+                            <div class="col-lg-6">
+                                <label class="esc-label">@Text["소수점 자릿수|Decimal Places"]</label>
+                                <InputNumber class="form-control esc-input" @bind-Value="_formulaEdit.DecimalPlaces" />
+                            </div>
+
+                            <div class="col-12">
+                                <label class="esc-label">@Text["설명|Description"]</label>
+                                <InputTextArea class="form-control esc-input" rows="3" @bind-Value="_formulaEdit.Description" />
+                            </div>
+                        </div>
+
+                        <div class="esc-option-grid">
+                            <label class="esc-option-card">
+                                <InputCheckbox @bind-Value="_formulaEdit.AllowNegativeResult" />
+                                <span>@Text["음수 결과 허용|Allow Negative Result"]</span>
+                            </label>
+
+                            <label class="esc-option-card">
+                                <InputCheckbox @bind-Value="_formulaEdit.IsActive" />
+                                <span>@Text["활성화|Active"]</span>
+                            </label>
+                        </div>
+
+                        <div class="esc-sticky-actions">
+                            <button type="submit" class="btn esc-btn-success">
+                                <i class="fa-solid fa-save"></i>
+                                @Text["저장|Save"]
+                            </button>
+
+                            <button type="button" class="btn esc-btn-primary" @onclick="NextStep">
+                                @Text["다음: 입력 필드|Next: Fields"]
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
+                    </section>
+                </EditForm>
+            }
+            else if (_currentStep == 2)
+            {
+                <section class="esc-card">
+                    <div class="esc-card-header">
+                        <div>
+                            <h3>@Text["2. 입력 필드 설정|2. Input Field Settings"]</h3>
+                            <p>@Text["계산식에서 사용할 변수와 입력 타입을 관리합니다.|Manage variables and input types used by the formula."]</p>
+                        </div>
+
+                        <button class="btn esc-btn-primary" @onclick="CreateField" disabled="@(_selectedFormula == null)">
+                            <i class="fa-solid fa-plus"></i>
+                            @Text["필드 추가|Add Field"]
+                        </button>
+                    </div>
+
+                    @if (_selectedFormula == null)
+                    {
+                        <div class="esc-empty-state compact">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>@Text["먼저 계산식을 저장하세요.|Please save the formula first."]</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="esc-field-grid">
+                            <div class="esc-field-table-wrap">
+                                @if (_selectedFormula.Fields.Count == 0)
+                                {
+                                    <div class="esc-empty-state compact">
+                                        <i class="fa-regular fa-folder-open"></i>
+                                        <span>@Text["등록된 필드가 없습니다.|No fields found."]</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <table class="esc-table">
+                                        <thead>
+                                            <tr>
+                                                <th>@Text["순서|Sort"]</th>
+                                                <th>@Text["필드명|Field"]</th>
+                                                <th>FieldKey</th>
+                                                <th>@Text["타입|Type"]</th>
+                                                <th>@Text["필수|Required"]</th>
+                                                <th>@Text["사용|Use"]</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var field in _selectedFormula.Fields.OrderBy(x => x.SortOrder))
+                                            {
+                                                <tr class="@(field.Guid == _selectedFieldGuid ? "selected" : "")"
+                                                    @onclick="() => SelectField(field)">
+                                                    <td>@field.SortOrder</td>
+                                                    <td>
+                                                        <strong>@(Text.IsKorean ? field.LabelKo : field.LabelEn)</strong>
+                                                        <small>@field.Unit</small>
+                                                    </td>
+                                                    <td><code>@field.FieldKey</code></td>
+                                                    <td><span class="esc-field-type">@field.FieldType</span></td>
+                                                    <td>@(field.IsRequired ? "Yes" : "No")</td>
+                                                    <td>@(field.UseInFormula ? "Yes" : "No")</td>
+                                                    <td>
+                                                        <button class="btn esc-icon-danger"
+                                                                @onclick:stopPropagation="true"
+                                                                @onclick="() => DeleteFieldAsync(field.Guid)">
+                                                            <i class="fa-solid fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                }
+                            </div>
+
+                            <div class="esc-field-editor">
+                                <div class="esc-sub-card-title">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                    @Text["필드 편집|Field Editor"]
+                                </div>
+
+                                <EditForm Model="_fieldEdit" OnValidSubmit="SaveFieldAsync">
+                                    <DataAnnotationsValidator />
+
+                                    <div class="row g-3">
+                                        <div class="col-12">
+                                            <label class="esc-label">FieldKey <b>*</b></label>
+                                            <InputText class="form-control esc-input" @bind-Value="_fieldEdit.FieldKey" />
+                                            <div class="esc-help">
+                                                @Text["예: ContractAmount, AdjustmentRate|Example: ContractAmount, AdjustmentRate"]
+                                            </div>
+                                        </div>
+
+                                        <div class="col-12">
+                                            <label class="esc-label">@Text["필드 타입|Field Type"]</label>
+                                            <DropdownSelect TItem="OptionItem<string>"
+                                                            DataSource="@_optFieldTypes"
+                                                            Value="@(_optFieldTypes.FirstOrDefault(x => x.Value == _fieldEdit.FieldType))"
+                                                            ValueChanged="OnFieldTypeChanged"
+                                                            TextSelector="x => x.Text"
+                                                            Placeholder="@Text["필드 타입 선택|Select Field Type"]"
+                                                            IconClass="fa-solid fa-list"
+                                                            WrapperClass="w-100" />
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label class="esc-label">@Text["라벨(한국어)|Label Korean"]</label>
+                                            <InputText class="form-control esc-input" @bind-Value="_fieldEdit.LabelKo" />
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label class="esc-label">@Text["라벨(영어)|Label English"]</label>
+                                            <InputText class="form-control esc-input" @bind-Value="_fieldEdit.LabelEn" />
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label class="esc-label">@Text["기본값|Default"]</label>
+                                            <InputText class="form-control esc-input" @bind-Value="_fieldEdit.DefaultValue" />
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label class="esc-label">@Text["단위|Unit"]</label>
+                                            <InputText class="form-control esc-input" @bind-Value="_fieldEdit.Unit" />
+                                        </div>
+
+                                        <div class="col-md-4">
+                                            <label class="esc-label">@Text["정렬|Sort"]</label>
+                                            <InputNumber class="form-control esc-input" @bind-Value="_fieldEdit.SortOrder" />
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label class="esc-label">@Text["최소값|Min"]</label>
+                                            <InputNumber class="form-control esc-input" @bind-Value="_fieldEdit.ValidationMin" />
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label class="esc-label">@Text["최대값|Max"]</label>
+                                            <InputNumber class="form-control esc-input" @bind-Value="_fieldEdit.ValidationMax" />
+                                        </div>
+                                    </div>
+
+                                    <div class="esc-option-grid mini">
+                                        <label class="esc-option-card">
+                                            <InputCheckbox @bind-Value="_fieldEdit.IsRequired" />
+                                            <span>@Text["필수|Required"]</span>
+                                        </label>
+
+                                        <label class="esc-option-card">
+                                            <InputCheckbox @bind-Value="_fieldEdit.IsReadonly" />
+                                            <span>@Text["읽기 전용|Readonly"]</span>
+                                        </label>
+
+                                        <label class="esc-option-card">
+                                            <InputCheckbox @bind-Value="_fieldEdit.UseInFormula" />
+                                            <span>@Text["계산식 사용|Use In Formula"]</span>
+                                        </label>
+                                    </div>
+
+                                    <div class="esc-inline-actions">
+                                        <button type="submit" class="btn esc-btn-success w-100">
+                                            <i class="fa-solid fa-save"></i>
+                                            @Text["필드 저장|Save Field"]
+                                        </button>
+                                    </div>
+                                </EditForm>
+
+                                @if (_fieldEdit.FieldType == BasicCodes.EscFormulaFieldType.Select && _fieldEdit.Id > 0)
+                                {
+                                    <div class="esc-option-editor">
+                                        <div class="esc-sub-card-title">
+                                            <i class="fa-solid fa-square-check"></i>
+                                            @Text["선택 옵션|Select Options"]
+                                        </div>
+
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <InputText class="form-control esc-input" placeholder="Value" @bind-Value="_optionEdit.OptionValue" />
+                                            </div>
+                                            <div class="col-6">
+                                                <InputNumber class="form-control esc-input" placeholder="Sort" @bind-Value="_optionEdit.SortOrder" />
+                                            </div>
+                                            <div class="col-6">
+                                                <InputText class="form-control esc-input" placeholder="Text Ko" @bind-Value="_optionEdit.OptionTextKo" />
+                                            </div>
+                                            <div class="col-6">
+                                                <InputText class="form-control esc-input" placeholder="Text En" @bind-Value="_optionEdit.OptionTextEn" />
+                                            </div>
+                                            <div class="col-12">
+                                                <button class="btn esc-btn-primary w-100" @onclick="SaveOptionAsync">
+                                                    <i class="fa-solid fa-plus"></i>
+                                                    @Text["옵션 저장|Save Option"]
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div class="esc-option-list">
+                                            @foreach (var option in _fieldEdit.Options.OrderBy(x => x.SortOrder))
+                                            {
+                                                <div class="esc-option-row">
+                                                    <div>
+                                                        <strong>@option.OptionValue</strong>
+                                                        <span>@option.OptionTextKo</span>
+                                                        <small>@option.OptionTextEn</small>
+                                                    </div>
+
+                                                    <button class="btn esc-icon-danger" @onclick="() => DeleteOptionAsync(option.Guid)">
+                                                        <i class="fa-solid fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="esc-sticky-actions">
+                            <button class="btn esc-btn-outline" @onclick="PrevStep">
+                                <i class="fa-solid fa-arrow-left"></i>
+                                @Text["이전|Previous"]
+                            </button>
+
+                            <button class="btn esc-btn-primary" @onclick="NextStep">
+                                @Text["다음: 계산식 작성|Next: Expression"]
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
+                    }
+                </section>
+            }
+            else if (_currentStep == 3)
+            {
+                <EditForm Model="_formulaEdit" OnValidSubmit="SaveFormulaAsync">
+                    <DataAnnotationsValidator />
+
+                    <section class="esc-card">
+                        <div class="esc-card-header">
+                            <div>
+                                <h3>@Text["3. 계산식 작성|3. Formula Expression"]</h3>
+                                <p>@Text["입력 필드의 FieldKey를 사용하여 계산식을 작성합니다.|Build the formula by using FieldKeys from input fields."]</p>
+                            </div>
+                        </div>
+
+                        <div class="esc-expression-layout">
+                            <div>
+                                <div class="esc-sub-card-title">
+                                    <i class="fa-solid fa-cubes"></i>
+                                    @Text["사용 가능한 변수|Available Variables"]
+                                </div>
+
+                                @if (_selectedFormula?.Fields.Count > 0)
+                                {
+                                    <div class="esc-variable-list">
+                                        @foreach (var field in _selectedFormula.Fields.Where(x => x.UseInFormula).OrderBy(x => x.SortOrder))
+                                        {
+                                            <button type="button"
+                                                    class="esc-variable-chip"
+                                                    @onclick="() => InsertToken(field.FieldKey)">
+                                                <strong>@field.FieldKey</strong>
+                                                <span>@(Text.IsKorean ? field.LabelKo : field.LabelEn)</span>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="esc-empty-state compact">
+                                        @Text["먼저 입력 필드를 생성하세요.|Create fields first."]
+                                    </div>
+                                }
+
+                                <div class="esc-sub-card-title mt-3">
+                                    <i class="fa-solid fa-plus-minus"></i>
+                                    @Text["빠른 연산자|Quick Operators"]
+                                </div>
+
+                                <div class="esc-operator-list">
+                                    @foreach (var op in _operators)
+                                    {
+                                        <button type="button" class="esc-operator" @onclick="() => InsertToken(op)">
+                                            @op
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="esc-label">@Text["계산식|Expression"]</label>
+                                <InputTextArea class="form-control esc-expression"
+                                               rows="8"
+                                               spellcheck="false"
+                                               @bind-Value="_formulaEdit.FormulaExpression" />
+
+                                <div class="esc-preview-box">
+                                    <div class="esc-sub-card-title">
+                                        <i class="fa-solid fa-eye"></i>
+                                        @Text["미리보기|Preview"]
+                                    </div>
+                                    <div class="esc-preview-expression">
+                                        @PreviewExpression
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="esc-sticky-actions">
+                            <button type="button" class="btn esc-btn-outline" @onclick="PrevStep">
+                                <i class="fa-solid fa-arrow-left"></i>
+                                @Text["이전|Previous"]
+                            </button>
+
+                            <button type="submit" class="btn esc-btn-success">
+                                <i class="fa-solid fa-save"></i>
+                                @Text["계산식 저장|Save Expression"]
+                            </button>
+
+                            <button type="button" class="btn esc-btn-primary" @onclick="NextStep">
+                                @Text["다음: 테스트|Next: Test"]
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
+                    </section>
+                </EditForm>
+            }
+            else if (_currentStep == 4)
+            {
+                <section class="esc-card">
+                    <div class="esc-card-header">
+                        <div>
+                            <h3>@Text["4. 테스트 및 적용|4. Test & Apply"]</h3>
+                            <p>@Text["실제 값으로 계산식을 테스트하고 기본값으로 적용할 수 있습니다.|Test the formula with sample values and apply it as default."]</p>
+                        </div>
+                    </div>
+
+                    @if (_selectedFormula?.Fields.Count > 0)
+                    {
+                        <div class="esc-test-layout">
+                            <div class="esc-test-inputs">
+                                <div class="esc-sub-card-title">
+                                    <i class="fa-solid fa-keyboard"></i>
+                                    @Text["테스트 입력값|Test Inputs"]
+                                </div>
+
+                                <div class="esc-test-grid">
+                                    @foreach (var field in _selectedFormula.Fields.OrderBy(x => x.SortOrder))
+                                    {
+                                        <div>
+                                            <label class="esc-label">
+                                                @(Text.IsKorean ? field.LabelKo : field.LabelEn)
+                                                @if (field.IsRequired)
+                                                {
+                                                    <b>*</b>
+                                                }
+                                            </label>
+
+                                            @if (field.FieldType == BasicCodes.EscFormulaFieldType.Boolean)
+                                            {
+                                                <label class="esc-option-card single">
+                                                    <input type="checkbox"
+                                                           checked="@GetBoolTestValue(field.FieldKey)"
+                                                          @onchange="e => SetTestValue(field.FieldKey, e.Value is bool checkedValue && checkedValue ? '1'.ToString() : '0'.ToString())" />
+                                                    <span>@Text["사용|Use"]</span>
+                                                </label>
+                                            }
+                                            else if (field.FieldType == BasicCodes.EscFormulaFieldType.Select)
+                                            {
+                                                <select class="form-select esc-input"
+                                                        value="@GetTestValue(field.FieldKey)"
+                                                        @onchange="e => SetTestValue(field.FieldKey, e.Value?.ToString() ?? string.Empty)">
+                                                    <option value="">@Text["선택|Select"]</option>
+                                                    @foreach (var option in field.Options.Where(x => x.IsActive).OrderBy(x => x.SortOrder))
+                                                    {
+                                                        <option value="@option.OptionValue">
+                                                            @(Text.IsKorean ? option.OptionTextKo : option.OptionTextEn)
+                                                        </option>
+                                                    }
+                                                </select>
+                                            }
+                                            else
+                                            {
+                                                <input class="form-control esc-input"
+                                                       value="@GetTestValue(field.FieldKey)"
+                                                       placeholder="@field.Placeholder"
+                                                       @onchange="e => SetTestValue(field.FieldKey, e.Value?.ToString() ?? string.Empty)" />
+                                            }
+
+                                            @if (!string.IsNullOrWhiteSpace(field.Unit))
+                                            {
+                                                <div class="esc-help">@field.Unit</div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+
+                                <button class="btn esc-btn-primary w-100 mt-3" @onclick="TestFormulaAsync">
+                                    <i class="fa-solid fa-play"></i>
+                                    @Text["계산 테스트|Test Formula"]
+                                </button>
+                            </div>
+
+                            <div class="esc-test-result">
+                                <div class="esc-sub-card-title">
+                                    <i class="fa-solid fa-chart-simple"></i>
+                                    @Text["결과|Result"]
+                                </div>
+
+                                <div class="esc-result-expression">
+                                    @PreviewExpression
+                                </div>
+
+                                @if (_testResult.HasValue)
+                                {
+                                    <div class="esc-result-success">
+                                        <span>@Text["계산 결과|Calculation Result"]</span>
+                                        <strong>@_testResult.Value.ToString("N0")</strong>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="esc-empty-state compact">
+                                        <i class="fa-solid fa-vial"></i>
+                                        <span>@Text["테스트를 실행하세요.|Run the test."]</span>
+                                    </div>
+                                }
+
+                                <button class="btn esc-btn-success w-100"
+                                        disabled="@(_selectedFormula == null || _selectedFormula.IsDefault || !_selectedFormula.IsActive)"
+                                        @onclick="() => SetDefaultAsync(_selectedFormulaGuid ?? Guid.Empty)">
+                                    <i class="fa-solid fa-star"></i>
+                                    @Text["기본값으로 설정|Set as Default"]
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="esc-sticky-actions">
+                            <button class="btn esc-btn-outline" @onclick="PrevStep">
+                                <i class="fa-solid fa-arrow-left"></i>
+                                @Text["이전|Previous"]
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="esc-empty-state compact">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>@Text["테스트할 필드가 없습니다.|There are no fields to test."]</span>
+                        </div>
+                    }
+                </section>
+            }
+        </main>
+    </div>
+</div>
+
+<style>
+    .esc-formula-page {
+        padding: 24px 32px;
+        background: #f4f7fb;
+        min-height: calc(100vh - 80px);
+        color: #102a4c;
+    }
+
+    .esc-formula-hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 20px;
+        background: linear-gradient(135deg, #102a4c, #1d4ed8);
+        color: #fff;
+        border-radius: 22px;
+        padding: 24px;
+        box-shadow: 0 16px 36px rgba(15, 23, 42, .16);
+        margin-bottom: 18px;
+    }
+
+    .esc-formula-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255,255,255,.14);
+        padding: 7px 12px;
+        border-radius: 999px;
+        font-weight: 800;
+        margin-bottom: 10px;
+    }
+
+    .esc-formula-hero h2 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 900;
+    }
+
+    .esc-formula-hero p {
+        margin: 8px 0 0;
+        color: rgba(255,255,255,.82);
+        font-weight: 600;
+    }
+
+    .esc-formula-current {
+        margin-top: 16px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .esc-formula-current span {
+        color: rgba(255,255,255,.75);
+        font-weight: 700;
+    }
+
+    .esc-formula-current strong {
+        background: rgba(255,255,255,.16);
+        padding: 5px 10px;
+        border-radius: 10px;
+    }
+
+    .esc-formula-hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .esc-btn-primary,
+    .esc-btn-outline,
+    .esc-btn-success {
+        border-radius: 12px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 9px 14px;
+    }
+
+    .esc-btn-primary {
+        background: #2563eb;
+        color: #fff;
+        border: 1px solid #2563eb;
+    }
+
+    .esc-btn-success {
+        background: #16a34a;
+        color: #fff;
+        border: 1px solid #16a34a;
+    }
+
+    .esc-btn-outline {
+        background: #fff;
+        color: #344054;
+        border: 1px solid #cbd5e1;
+    }
+
+    .esc-formula-alert {
+        border-radius: 14px;
+        margin-bottom: 18px;
+        font-weight: 700;
+    }
+
+    .esc-formula-shell {
+        display: grid;
+        grid-template-columns: 360px minmax(0, 1fr);
+        gap: 20px;
+    }
+
+    .esc-formula-library,
+    .esc-formula-workspace,
+    .esc-card {
+        background: #fff;
+        border: 1px solid #dbe4f0;
+        border-radius: 20px;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+    }
+
+    .esc-formula-library {
+        padding: 18px;
+        height: fit-content;
+        position: sticky;
+        top: 16px;
+    }
+
+    .esc-panel-title-row,
+    .esc-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .esc-panel-title-row h3,
+    .esc-card-header h3 {
+        margin: 0;
+        font-size: 1.15rem;
+        font-weight: 900;
+        color: #102a4c;
+    }
+
+    .esc-panel-title-row p,
+    .esc-card-header p {
+        margin: 4px 0 0;
+        color: #667085;
+        font-weight: 600;
+    }
+
+    .esc-count {
+        background: #eaf2ff;
+        color: #1d4ed8;
+        padding: 5px 11px;
+        border-radius: 999px;
+        font-weight: 900;
+    }
+
+    .esc-search-box {
+        position: relative;
+        margin-bottom: 14px;
+    }
+
+    .esc-search-box i {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #94a3b8;
+    }
+
+    .esc-search-box input {
+        border-radius: 12px;
+        padding-left: 36px;
+        min-height: 42px;
+        border: 1px solid #ccd6e5;
+    }
+
+    .esc-formula-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 70vh;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+
+    .esc-formula-card {
+        width: 100%;
+        text-align: left;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 14px;
+        transition: .18s ease;
+    }
+
+    .esc-formula-card:hover,
+    .esc-formula-card.active {
+        background: #eff6ff;
+        border-color: #2563eb;
+        box-shadow: 0 10px 22px rgba(37, 99, 235, .11);
+    }
+
+    .esc-formula-card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .esc-formula-card-head strong {
+        display: block;
+        font-weight: 900;
+        color: #1e293b;
+    }
+
+    .esc-formula-card-head small {
+        color: #667085;
+        font-weight: 600;
+    }
+
+    .esc-card-badges {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 5px;
+    }
+
+    .esc-status {
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: .72rem;
+        font-weight: 900;
+        font-style: normal;
+        color: #fff;
+        white-space: nowrap;
+    }
+
+    .esc-status-primary { background: #1d4ed8; }
+    .esc-status-success { background: #16a34a; }
+    .esc-status-muted { background: #64748b; }
+
+    .esc-formula-card-meta {
+        margin-top: 10px;
+        display: flex;
+        gap: 12px;
+        color: #667085;
+        font-size: .86rem;
+        font-weight: 700;
+    }
+
+    .esc-formula-card-expression {
+        margin-top: 10px;
+        color: #475569;
+        font-family: Consolas, monospace;
+        font-size: .82rem;
+        background: #f8fafc;
+        border-radius: 10px;
+        padding: 8px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .esc-formula-workspace {
+        overflow: hidden;
+    }
+
+    .esc-stepper {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        padding: 16px;
+        border-bottom: 1px solid #e8eef6;
+        background: #fbfcff;
+    }
+
+    .esc-step {
+        border: 1px solid #dbe4f0;
+        background: #fff;
+        border-radius: 16px;
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-align: left;
+        transition: .18s ease;
+    }
+
+    .esc-step span {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        background: #eaf2ff;
+        color: #1d4ed8;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+    }
+
+    .esc-step strong {
+        display: block;
+        color: #102a4c;
+        font-weight: 900;
+    }
+
+    .esc-step small {
+        color: #667085;
+        font-weight: 600;
+    }
+
+    .esc-step.active {
+        border-color: #102a4c;
+        background: #102a4c;
+    }
+
+    .esc-step.active span {
+        background: #fff;
+        color: #102a4c;
+    }
+
+    .esc-step.active strong,
+    .esc-step.active small {
+        color: #fff;
+    }
+
+    .esc-step.done {
+        border-color: #93c5fd;
+        background: #eff6ff;
+    }
+
+    .esc-card {
+        margin: 18px;
+        padding: 20px;
+        box-shadow: none;
+    }
+
+    .esc-warning-box {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        background: #fffbeb;
+        color: #92400e;
+        border: 1px solid #fde68a;
+        border-radius: 14px;
+        padding: 12px;
+        font-weight: 800;
+        margin-bottom: 16px;
+    }
+
+    .esc-label {
+        display: block;
+        font-weight: 900;
+        color: #344054;
+        margin-bottom: 6px;
+    }
+
+    .esc-label b {
+        color: #dc2626;
+    }
+
+    .esc-input,
+    .esc-expression {
+        border-radius: 12px;
+        min-height: 42px;
+        border: 1px solid #ccd6e5;
+    }
+
+    .esc-expression {
+        font-family: Consolas, monospace;
+        line-height: 1.55;
+        font-size: .95rem;
+    }
+
+    .esc-help {
+        margin-top: 5px;
+        color: #667085;
+        font-size: .84rem;
+        font-weight: 600;
+    }
+
+    .esc-option-grid {
+        margin-top: 16px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .esc-option-grid.mini {
+        grid-template-columns: 1fr;
+    }
+
+    .esc-option-card {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        border: 1px solid #dbe4f0;
+        border-radius: 12px;
+        background: #f8fafc;
+        padding: 11px 12px;
+        font-weight: 800;
+        color: #344054;
+    }
+
+    .esc-option-card.single {
+        min-height: 42px;
+    }
+
+    .esc-sticky-actions {
+        margin-top: 18px;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        border-top: 1px solid #e8eef6;
+        padding-top: 16px;
+    }
+
+    .esc-empty-state {
+        min-height: 220px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        color: #94a3b8;
+        font-weight: 900;
+        text-align: center;
+    }
+
+    .esc-empty-state.compact {
+        min-height: 120px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 14px;
+        background: #f8fafc;
+    }
+
+    .esc-field-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) 420px;
+        gap: 18px;
+    }
+
+    .esc-field-table-wrap {
+        overflow-x: auto;
+    }
+
+    .esc-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 8px;
+    }
+
+    .esc-table th {
+        color: #667085;
+        font-size: .82rem;
+        font-weight: 900;
+        padding: 8px 10px;
+        white-space: nowrap;
+    }
+
+    .esc-table td {
+        background: #fff;
+        border-top: 1px solid #e2e8f0;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 12px 10px;
+        vertical-align: middle;
+    }
+
+    .esc-table td:first-child {
+        border-left: 1px solid #e2e8f0;
+        border-radius: 12px 0 0 12px;
+    }
+
+    .esc-table td:last-child {
+        border-right: 1px solid #e2e8f0;
+        border-radius: 0 12px 12px 0;
+    }
+
+    .esc-table tr.selected td {
+        background: #eff6ff;
+        border-color: #93c5fd;
+    }
+
+    .esc-table small {
+        display: block;
+        color: #667085;
+        font-size: .8rem;
+    }
+
+    .esc-table code {
+        background: #f1f5f9;
+        color: #1d4ed8;
+        padding: 3px 7px;
+        border-radius: 8px;
+        font-weight: 800;
+    }
+
+    .esc-field-type {
+        background: #eaf2ff;
+        color: #1d4ed8;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: .78rem;
+        font-weight: 900;
+    }
+
+    .esc-icon-danger {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        border-radius: 10px;
+        padding: 7px 9px;
+    }
+
+    .esc-field-editor {
+        border: 1px solid #e2e8f0;
+        border-radius: 18px;
+        padding: 16px;
+        background: #fbfcff;
+        height: fit-content;
+    }
+
+    .esc-sub-card-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 900;
+        color: #102a4c;
+        margin-bottom: 12px;
+    }
+
+    .esc-inline-actions {
+        margin-top: 14px;
+    }
+
+    .esc-option-editor {
+        margin-top: 18px;
+        border-top: 1px solid #e8eef6;
+        padding-top: 16px;
+    }
+
+    .esc-option-list {
+        margin-top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .esc-option-row {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 10px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        background: #fff;
+    }
+
+    .esc-option-row div {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .esc-option-row small {
+        color: #667085;
+    }
+
+    .esc-expression-layout {
+        display: grid;
+        grid-template-columns: 360px minmax(0, 1fr);
+        gap: 18px;
+    }
+
+    .esc-variable-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 360px;
+        overflow-y: auto;
+    }
+
+    .esc-variable-chip {
+        border: 1px solid #bfdbfe;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border-radius: 12px;
+        padding: 9px 10px;
+        text-align: left;
+    }
+
+    .esc-variable-chip strong {
+        display: block;
+        font-weight: 900;
+    }
+
+    .esc-variable-chip span {
+        display: block;
+        color: #475569;
+        font-size: .82rem;
+        font-weight: 700;
+    }
+
+    .esc-operator-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .esc-operator {
+        min-width: 44px;
+        height: 38px;
+        border: 1px solid #dbe4f0;
+        background: #fff;
+        border-radius: 10px;
+        font-weight: 900;
+        color: #102a4c;
+    }
+
+    .esc-preview-box {
+        margin-top: 14px;
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        border-radius: 14px;
+        padding: 14px;
+    }
+
+    .esc-preview-expression {
+        font-family: Consolas, monospace;
+        color: #102a4c;
+        font-weight: 800;
+        word-break: break-word;
+    }
+
+    .esc-test-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) 380px;
+        gap: 18px;
+    }
+
+    .esc-test-inputs,
+    .esc-test-result {
+        border: 1px solid #e2e8f0;
+        border-radius: 18px;
+        padding: 16px;
+        background: #fbfcff;
+    }
+
+    .esc-test-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .esc-result-expression {
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        border-radius: 14px;
+        padding: 12px;
+        font-family: Consolas, monospace;
+        font-weight: 800;
+        color: #102a4c;
+        margin-bottom: 14px;
+        word-break: break-word;
+    }
+
+    .esc-result-success {
+        background: #ecfdf5;
+        border: 1px solid #bbf7d0;
+        border-radius: 18px;
+        padding: 18px;
+        margin-bottom: 14px;
+    }
+
+    .esc-result-success span {
+        display: block;
+        color: #15803d;
+        font-weight: 900;
+        margin-bottom: 6px;
+    }
+
+    .esc-result-success strong {
+        display: block;
+        color: #064e3b;
+        font-size: 2rem;
+        font-weight: 900;
+    }
+
+    @@media (max-width: 1280px) {
+        .esc-formula-shell,
+        .esc-field-grid,
+        .esc-expression-layout,
+        .esc-test-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .esc-formula-library {
+            position: static;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .esc-formula-page {
+            padding: 14px;
+        }
+
+        .esc-formula-hero {
+            flex-direction: column;
+        }
+
+        .esc-formula-hero-actions {
+            width: 100%;
+            justify-content: flex-start;
+        }
+
+        .esc-stepper {
+            grid-template-columns: 1fr;
+        }
+
+        .esc-option-grid,
+        .esc-test-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .esc-sticky-actions {
+            flex-direction: column;
+        }
+
+        .esc-sticky-actions .btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+
+@code {
+    private bool _loading;
+    private bool _success;
+    private string? _message;
+
+    private int _currentStep = 1;
+    private string _searchKeyword = string.Empty;
+
+    private List<EscFormulaSetting> _formulas = new();
+
+    private EscFormulaSetting? _selectedFormula;
+    private Guid? _selectedFormulaGuid;
+
+    private EscFormulaSetting _formulaEdit = CreateDefaultFormula();
+
+    private EscFormulaField _fieldEdit = new();
+    private Guid? _selectedFieldGuid;
+
+    private EscFormulaFieldOption _optionEdit = new();
+
+    private Dictionary<string, string> _testValues = new();
+    private decimal? _testResult;
+
+    private List<OptionItem<string>> _optRounding = new();
+    private List<OptionItem<string>> _optFieldTypes = new();
+
+    private readonly string[] _operators =
+    {
+        "+", "-", "*", "/", "(", ")", "/ 100"
+    };
+
+    private List<EscFormulaSetting> FilteredFormulas =>
+        string.IsNullOrWhiteSpace(_searchKeyword)
+            ? _formulas
+            : _formulas
+                .Where(x =>
+                    (!string.IsNullOrWhiteSpace(x.FormulaCode) && x.FormulaCode.Contains(_searchKeyword, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(x.FormulaName) && x.FormulaName.Contains(_searchKeyword, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrWhiteSpace(x.FormulaNameEn) && x.FormulaNameEn.Contains(_searchKeyword, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+    private string PreviewExpression
+    {
+        get
+        {
+            var expression = _formulaEdit.FormulaExpression ?? string.Empty;
+
+            if (_selectedFormula?.Fields == null || _selectedFormula.Fields.Count == 0)
+            {
+                return string.IsNullOrWhiteSpace(expression)
+                    ? Text["계산식을 입력하세요.|Please enter expression."]
+                    : expression;
+            }
+
+            foreach (var field in _selectedFormula.Fields)
+            {
+                var label = Text.IsKorean ? field.LabelKo : field.LabelEn;
+
+                if (!string.IsNullOrWhiteSpace(field.FieldKey) && !string.IsNullOrWhiteSpace(label))
+                {
+                    expression = System.Text.RegularExpressions.Regex.Replace(
+                        expression,
+                        $@"\b{System.Text.RegularExpressions.Regex.Escape(field.FieldKey)}\b",
+                        label,
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                    );
+                }
+            }
+
+            return string.IsNullOrWhiteSpace(expression)
+                ? Text["계산식을 입력하세요.|Please enter expression."]
+                : expression;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        BuildOptions();
+        await LoadAsync();
+    }
+
+    private void BuildOptions()
+    {
+        _optRounding = BasicCodes.EscFormulaRounding.All
+            .Select(x => new OptionItem<string>
+            {
+                Value = x,
+                Text = Text.IsKorean ? GetRoundingNameKo(x) : GetRoundingNameEn(x)
+            })
+            .ToList();
+
+        _optFieldTypes = BasicCodes.EscFormulaFieldType.All
+            .Select(x => new OptionItem<string>
+            {
+                Value = x,
+                Text = Text.IsKorean
+                    ? BasicCodes.EscFormulaFieldType.GetNameKo(x)
+                    : BasicCodes.EscFormulaFieldType.GetNameEn(x)
+            })
+            .ToList();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _message = null;
+
+        try
+        {
+            _formulas = await FormulaService.GetFormulasAsync();
+
+            if (_selectedFormulaGuid.HasValue)
+            {
+                await SelectFormulaAsync(_selectedFormulaGuid.Value);
+            }
+            else if (_formulas.Count > 0)
+            {
+                var target = _formulas.FirstOrDefault(x => x.IsDefault) ?? _formulas.First();
+                await SelectFormulaAsync(target.Guid);
+            }
+            else
+            {
+                CreateFormula();
+            }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void CreateFormula()
+    {
+        _selectedFormula = null;
+        _selectedFormulaGuid = null;
+        _formulaEdit = CreateDefaultFormula();
+        _fieldEdit = new EscFormulaField();
+        _selectedFieldGuid = null;
+        _testValues.Clear();
+        _testResult = null;
+        _currentStep = 1;
+        _message = Text["새 계산식을 작성하세요. 먼저 기본 정보를 저장해야 필드를 추가할 수 있습니다.|Create a new formula. Save basic information first before adding fields."];
+        _success = true;
+    }
+
+    private void DuplicateFormula()
+    {
+        if (_selectedFormula == null)
+        {
+            CreateFormula();
+            return;
+        }
+
+        _selectedFormulaGuid = null;
+        _selectedFormula = null;
+
+        _formulaEdit = CloneFormula(_formulaEdit);
+        _formulaEdit.Id = 0;
+        _formulaEdit.Guid = Guid.NewGuid();
+        _formulaEdit.FormulaCode = $"{_formulaEdit.FormulaCode}_COPY_{DateTime.Now:HHmmss}";
+        _formulaEdit.FormulaName = $"{_formulaEdit.FormulaName} Copy";
+        _formulaEdit.FormulaNameEn = $"{_formulaEdit.FormulaNameEn} Copy";
+        _formulaEdit.IsDefault = false;
+        _formulaEdit.IsActive = true;
+
+        _fieldEdit = new EscFormulaField();
+        _selectedFieldGuid = null;
+        _testValues.Clear();
+        _testResult = null;
+        _currentStep = 1;
+
+        _success = true;
+        _message = Text["복사본이 생성되었습니다. 저장 후 필드를 다시 구성하세요.|A copy has been created. Save it first, then configure fields."];
+    }
+
+    private async Task SelectFormulaAsync(Guid formulaGuid)
+    {
+        _selectedFormulaGuid = formulaGuid;
+        _selectedFormula = await FormulaService.GetFormulaWithFieldsAsync(formulaGuid);
+
+        if (_selectedFormula == null)
+        {
+            return;
+        }
+
+        _formulaEdit = CloneFormula(_selectedFormula);
+        _testValues = BuildDefaultTestValues(_selectedFormula);
+        _testResult = null;
+
+        if (_selectedFormula.Fields.Count > 0)
+        {
+            SelectField(_selectedFormula.Fields.OrderBy(x => x.SortOrder).First());
+        }
+        else
+        {
+            CreateField();
+        }
+    }
+
+    private async Task SaveFormulaAsync()
+    {
+        var savedCode = _formulaEdit.FormulaCode;
+
+        var result = await FormulaService.SaveFormulaAsync(_formulaEdit);
+
+        _success = result.Success;
+        _message = result.Message;
+
+        _formulas = await FormulaService.GetFormulasAsync();
+
+        if (result.Success)
+        {
+            var target = _formulas.FirstOrDefault(x =>
+                x.FormulaCode.Equals(savedCode, StringComparison.OrdinalIgnoreCase));
+
+            if (target != null)
+            {
+                await SelectFormulaAsync(target.Guid);
+            }
+        }
+    }
+
+    private async Task SetDefaultAsync(Guid formulaGuid)
+    {
+        if (formulaGuid == Guid.Empty)
+        {
+            return;
+        }
+
+        var result = await FormulaService.SetDefaultAsync(formulaGuid);
+
+        _success = result.Success;
+        _message = result.Message;
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteFormulaAsync(Guid formulaGuid)
+    {
+        var result = await FormulaService.DeleteFormulaAsync(formulaGuid);
+
+        _success = result.Success;
+        _message = result.Message;
+
+        await LoadAsync();
+    }
+
+    private void CreateField()
+    {
+        if (_selectedFormula == null)
+        {
+            return;
+        }
+
+        _selectedFieldGuid = null;
+
+        _fieldEdit = new EscFormulaField
+        {
+            Guid = Guid.NewGuid(),
+            FormulaSettingId = _selectedFormula.Id,
+            FieldType = BasicCodes.EscFormulaFieldType.Decimal,
+            IsRequired = true,
+            UseInFormula = true,
+            SortOrder = _selectedFormula.Fields.Count + 1
+        };
+
+        _optionEdit = new EscFormulaFieldOption();
+    }
+
+    private void SelectField(EscFormulaField field)
+    {
+        _selectedFieldGuid = field.Guid;
+        _fieldEdit = CloneField(field);
+
+        _optionEdit = new EscFormulaFieldOption
+        {
+            Guid = Guid.NewGuid(),
+            FormulaFieldId = field.Id,
+            IsActive = true,
+            SortOrder = field.Options.Count + 1
+        };
+    }
+
+    private async Task SaveFieldAsync()
+    {
+        var result = await FormulaService.SaveFieldAsync(_fieldEdit);
+
+        _success = result.Success;
+        _message = result.Message;
+
+        if (_selectedFormulaGuid.HasValue)
+        {
+            await SelectFormulaAsync(_selectedFormulaGuid.Value);
+        }
+    }
+
+    private async Task DeleteFieldAsync(Guid fieldGuid)
+    {
+        var result = await FormulaService.DeleteFieldAsync(fieldGuid);
+
+        _success = result.Success;
+        _message = result.Message;
+
+        if (_selectedFormulaGuid.HasValue)
+        {
+            await SelectFormulaAsync(_selectedFormulaGuid.Value);
+        }
+    }
+
+    private async Task SaveOptionAsync()
+    {
+        _optionEdit.FormulaFieldId = _fieldEdit.Id;
+
+        var result = await FormulaService.SaveFieldOptionAsync(_optionEdit);
+
+        _success = result.Success;
+        _message = result.Message;
+
+        if (_selectedFormulaGuid.HasValue)
+        {
+            await SelectFormulaAsync(_selectedFormulaGuid.Value);
+        }
+    }
+
+    private async Task DeleteOptionAsync(Guid optionGuid)
+    {
+        var result = await FormulaService.DeleteFieldOptionAsync(optionGuid);
+
+        _success = result.Success;
+        _message = result.Message;
+
+        if (_selectedFormulaGuid.HasValue)
+        {
+            await SelectFormulaAsync(_selectedFormulaGuid.Value);
+        }
+    }
+
+    private async Task TestFormulaAsync()
+    {
+        if (!_selectedFormulaGuid.HasValue)
+        {
+            return;
+        }
+
+        var result = await FormulaService.TestFormulaAsync(_selectedFormulaGuid.Value, _testValues);
+
+        _success = result.Success;
+        _message = result.Message;
+
+        _testResult = result.Success ? result.Item : null;
+    }
+
+    private Task OnRoundingChanged(OptionItem<string>? item)
+    {
+        _formulaEdit.RoundingMethod = string.IsNullOrWhiteSpace(item?.Value)
+            ? BasicCodes.EscFormulaRounding.Round
+            : item.Value;
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnFieldTypeChanged(OptionItem<string>? item)
+    {
+        _fieldEdit.FieldType = string.IsNullOrWhiteSpace(item?.Value)
+            ? BasicCodes.EscFormulaFieldType.Decimal
+            : item.Value;
+
+        return Task.CompletedTask;
+    }
+
+    private void InsertToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_formulaEdit.FormulaExpression))
+        {
+            _formulaEdit.FormulaExpression = token;
+        }
+        else
+        {
+            _formulaEdit.FormulaExpression += $" {token}";
+        }
+    }
+
+    private string GetTestValue(string key)
+    {
+        return _testValues.TryGetValue(key, out var value) ? value : string.Empty;
+    }
+
+    private bool GetBoolTestValue(string key)
+    {
+        return _testValues.TryGetValue(key, out var value) && value == "1";
+    }
+
+    private void SetTestValue(string key, string value)
+    {
+        _testValues[key] = value;
+    }
+
+    private void GoStep(int step)
+    {
+        _currentStep = Math.Clamp(step, 1, 4);
+    }
+
+    private void NextStep()
+    {
+        _currentStep = Math.Clamp(_currentStep + 1, 1, 4);
+    }
+
+    private void PrevStep()
+    {
+        _currentStep = Math.Clamp(_currentStep - 1, 1, 4);
+    }
+
+    private string StepClass(int step)
+    {
+        if (_currentStep == step)
+        {
+            return "active";
+        }
+
+        if (_currentStep > step)
+        {
+            return "done";
+        }
+
+        return string.Empty;
+    }
+
+    private static Dictionary<string, string> BuildDefaultTestValues(EscFormulaSetting formula)
+    {
+        return formula.Fields
+            .ToDictionary(
+                x => x.FieldKey,
+                x => string.IsNullOrWhiteSpace(x.DefaultValue) ? "0" : x.DefaultValue
+            );
+    }
+
+    private static EscFormulaSetting CreateDefaultFormula()
+    {
+        return new EscFormulaSetting
+        {
+            Guid = Guid.NewGuid(),
+            FormulaCode = $"CUSTOM_ESC_{DateTime.Now:yyyyMMddHHmmss}",
+            FormulaName = "새 ESC 계산식",
+            FormulaNameEn = "New ESC Formula",
+            FormulaExpression = "",
+            RoundingMethod = BasicCodes.EscFormulaRounding.Round,
+            DecimalPlaces = 0,
+            AllowNegativeResult = true,
+            IsActive = true,
+            SortOrder = 1
+        };
+    }
+
+    private static EscFormulaSetting CloneFormula(EscFormulaSetting item)
+    {
+        return new EscFormulaSetting
+        {
+            Id = item.Id,
+            Guid = item.Guid,
+            FormulaCode = item.FormulaCode,
+            FormulaName = item.FormulaName,
+            FormulaNameEn = item.FormulaNameEn,
+            Description = item.Description,
+            FormulaExpression = item.FormulaExpression,
+            RoundingMethod = item.RoundingMethod,
+            DecimalPlaces = item.DecimalPlaces,
+            AllowNegativeResult = item.AllowNegativeResult,
+            IsDefault = item.IsDefault,
+            IsActive = item.IsActive,
+            SortOrder = item.SortOrder,
+            DateCreated = item.DateCreated,
+            DateModified = item.DateModified,
+            UserCreated = item.UserCreated,
+            UserModified = item.UserModified
+        };
+    }
+
+    private static EscFormulaField CloneField(EscFormulaField item)
+    {
+        return new EscFormulaField
+        {
+            Id = item.Id,
+            Guid = item.Guid,
+            FormulaSettingId = item.FormulaSettingId,
+            FieldKey = item.FieldKey,
+            LabelKo = item.LabelKo,
+            LabelEn = item.LabelEn,
+            FieldType = item.FieldType,
+            DefaultValue = item.DefaultValue,
+            Placeholder = item.Placeholder,
+            Unit = item.Unit,
+            IsRequired = item.IsRequired,
+            IsReadonly = item.IsReadonly,
+            UseInFormula = item.UseInFormula,
+            SortOrder = item.SortOrder,
+            ValidationMin = item.ValidationMin,
+            ValidationMax = item.ValidationMax,
+            Options = item.Options.ToList()
+        };
+    }
+
+    private static string ShortExpression(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "-";
+        }
+
+        return value.Length <= 80 ? value : value.Substring(0, 80) + "...";
+    }
+
+    private static string GetRoundingNameKo(string value)
+    {
+        return value switch
+        {
+            BasicCodes.EscFormulaRounding.Round => "반올림",
+            BasicCodes.EscFormulaRounding.Floor => "버림",
+            BasicCodes.EscFormulaRounding.Ceiling => "올림",
+            BasicCodes.EscFormulaRounding.None => "없음",
+            _ => value
+        };
+    }
+
+    private static string GetRoundingNameEn(string value)
+    {
+        return value switch
+        {
+            BasicCodes.EscFormulaRounding.Round => "Round",
+            BasicCodes.EscFormulaRounding.Floor => "Floor",
+            BasicCodes.EscFormulaRounding.Ceiling => "Ceiling",
+            BasicCodes.EscFormulaRounding.None => "None",
+            _ => value
+        };
+    }
+}

@@ -248,6 +248,11 @@
                     @onclick='() => Navigate("/admin/customers", "settings")'>
                  <i class="fa-solid fa-building-user"></i>   @Text["고객 관리|Customer Management"]
             </button>
+            <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/management/esc-formula-setting") ? "active" : "")"
+                @onclick='() => Navigate("/management/esc-formula-setting", "settings")'>
+            <i class="fa-solid fa-calculator"></i>
+            @Text["ESC 계산식 설정|ESC Formula Settings"]
+            </button>   
   
         }
     </nav>

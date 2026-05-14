@@ -1,9 +1,8 @@
-using System.Linq;
-using System.Security;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.DependencyInjection;
 using ESC.CONCOST.Base;
 using ESC.CONCOST.ModuleSettingCore;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ESC.CONCOST.ModuleSetting;
 
@@ -14,8 +13,8 @@ public class ModuleAspNetRegister : IModuleAspNet
         GlobalPermissions.Register(typeof(PERMISSION));
     }
 
-    public void ConfigureServices(IServiceCollection services,
-        Microsoft.Extensions.Configuration.IConfiguration config)
+    public void ConfigureServices(IServiceCollection services, IConfiguration config)
     {
+        services.AddScoped<IEscFormulaSettingService, EscFormulaSettingService>();
     }
 }

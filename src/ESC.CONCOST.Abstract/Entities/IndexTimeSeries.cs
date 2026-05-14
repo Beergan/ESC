@@ -1,4 +1,3 @@
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -10,21 +9,27 @@ namespace ESC.CONCOST.Abstract
         [Column("period_key")]
         [Required]
         [StringLength(6)]
-        public string PeriodKey { get; set; } // YYYYMM
+        public string PeriodKey { get; set; } = string.Empty; // YYYYMM
 
+        [Column("year")]
+        public int Year { get; set; }
+
+        [Column("month")]
+        public int Month { get; set; }
+
+        // Nếu DB cũ đang dùng index_key thì để Column là "index_key".
+        // Nếu DB mới thì dùng "index_type_id".
         [Column("index_key")]
         [Required]
-        [StringLength(50)]
-        public int? IndexKey { get; set; }
+        public int IndexTypeId { get; set; }
 
-        [Column("index_value")]
+        [Column("index_value", TypeName = "decimal(18,6)")]
         public decimal IndexValue { get; set; }
 
         [Column("data_verified")]
-        public bool DataVerified { get; set; } = false;
+        public bool DataVerified { get; set; }
 
-        // Navigation Properties
-        [ForeignKey("IndexKey")]
-        public virtual IndexType IndexType { get; set; }
+        [ForeignKey(nameof(IndexTypeId))]
+        public virtual IndexType? IndexType { get; set; }
     }
 }

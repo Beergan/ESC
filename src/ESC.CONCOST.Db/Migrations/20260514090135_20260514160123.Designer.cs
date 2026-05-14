@@ -4,6 +4,7 @@ using ESC.CONCOST.Db.DbMssql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ESC.CONCOST.Db.Migrations
 {
     [DbContext(typeof(DbMssqlContext))]
-    partial class DbMssqlContextModelSnapshot : ModelSnapshot
+    [Migration("20260514090135_20260514160123")]
+    partial class _20260514160123
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
