@@ -1,4 +1,5 @@
 @page "/escalation/create"
+@page "/escalation/edit/{ContractGuid:guid}"
 @using System.Globalization
 @using System.IO
 @attribute [Authorize]
@@ -15,7 +16,9 @@
     <div class="wizard-header">
         <h2>
             <i class="fa-solid fa-bolt wizard-title-icon"></i>
-            @Text["물가변동 조정 관리|Create ESC Project"]
+            @Text[IsEditMode
+         ? "물가변동 프로젝트 수정|Edit ESC Project"
+         : "물가변동 조정 관리|Create ESC Project"]
         </h2>
         <p>
             @Text["ESC 물가변동 계약금액 조정 관리 시스템|ESC Contract Price Adjustment Management System"]
@@ -287,7 +290,7 @@
 
                     <div class="form-group half-width">
                         <label class="form-label">
-                            @Text["준공예정일|Completion Date"] <span class="required">*</span>
+                            @Text[IsEditMode ? "수정 완료|Update" : "산출 시작|Complete & Save"] <span class="required">*</span>
                         </label>
 
                         <InputDate @bind-Value="Model.CompletionDate"
@@ -721,6 +724,10 @@
 </div>
 @code {
     private int CurrentStep { get; set; } = 1;
+    [Parameter]
+    public Guid? ContractGuid { get; set; }
+
+    private bool IsEditMode => ContractGuid.HasValue && ContractGuid.Value != Guid.Empty;
 
     private ContractWizardDto Model { get; set; } = new();
 
@@ -739,9 +746,59 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadInitialDataAsync();
-        SetDefaultDates();
-    }
 
+        if (IsEditMode)
+        {
+            await LoadContractForEditAsync();
+        }
+        else
+        {
+            SetDefaultDates();
+        }
+    }
+    private async Task LoadContractForEditAsync()
+    {
+        try
+        {
+            IsBusy = true;
+
+            var result = await ESCService.GetContractAsync(ContractGuid!.Value);
+
+            if (result == null || !result.Success || result.Item == null)
+            {
+                await Alert.Error(
+                    string.IsNullOrWhiteSpace(result?.Message)
+                        ? Text["프로젝트를 불러올 수 없습니다.|Cannot load project."]
+                        : result.Message,
+                    Text["오류|Error"]
+                );
+
+                Navigation.NavigateTo("/escalation");
+                return;
+            }
+
+            Model = result.Item;
+
+            SelectedCategory = ActiveCategories
+                .FirstOrDefault(x => x.Name == Model.WorkType || x.NameEn == Model.WorkType);
+
+            SelectedContract = ActiveContracts
+                .FirstOrDefault(x => x.Name == Model.ContractMethod || x.NameEn == Model.ContractMethod);
+        }
+        catch
+        {
+            await Alert.Error(
+                Text["프로젝트를 불러오는 중 오류가 발생했습니다.|An error occurred while loading project."],
+                Text["오류|Error"]
+            );
+
+            Navigation.NavigateTo("/escalation");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
     private async Task LoadInitialDataAsync()
     {
         try
@@ -1242,26 +1299,27 @@
             return;
         }
 
-        if (!await ValidateCurrentStepAsync())
-        {
-            return;
-        }
-
         try
         {
             IsBusy = true;
 
-            var result = await ESCService.CreateContractAsync(Model);
+            ResultOf<Contract> result;
+
+            if (IsEditMode)
+            {
+                result = await ESCService.UpdateContractAsync(ContractGuid!.Value, Model);
+            }
+            else
+            {
+                result = await ESCService.CreateContractAsync(Model);
+            }
 
             if (result == null || !result.Success)
             {
-                IsBusy = false;
-                StateHasChanged();
-
                 await Alert.Error(
                     string.IsNullOrWhiteSpace(result?.Message)
-                        ? Text["저장에 실패했습니다.|Failed to save the project."]
-                        : Text[result.Message],
+                        ? Text["저장 중 오류가 발생했습니다.|An error occurred while saving."]
+                        : result.Message,
                     Text["오류|Error"]
                 );
 
@@ -1270,20 +1328,12 @@
 
             await Alert.Alert(
                 Text["성공|Success"],
-                Text["프로젝트가 저장되었습니다.|Project saved successfully."]
+                IsEditMode
+                    ? Text["프로젝트가 수정되었습니다.|Project has been updated."]
+                    : Text["프로젝트가 생성되었습니다.|Project has been created."]
             );
 
-            Navigation.NavigateTo("/escalation/workspace");
-        }
-        catch
-        {
-            IsBusy = false;
-            StateHasChanged();
-
-            await Alert.Error(
-                Text["저장 중 오류가 발생했습니다.|An error occurred while saving."],
-                Text["오류|Error"]
-            );
+            Navigation.NavigateTo("/escalation");
         }
         finally
         {

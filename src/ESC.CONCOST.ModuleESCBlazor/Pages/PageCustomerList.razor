@@ -1,0 +1,330 @@
+﻿@page "/admin/customers"
+@attribute [Authorize]
+@using ESC.CONCOST.Abstract
+@using ESC.CONCOST.ModuleESCCore.Interfaces
+@inject ITextTranslator Text
+@inject ICustomerAdminService CustomerAdminService
+@inject ISweetAlertService Alert
+@inject NavigationManager NavigationManager
+<div class="erp-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="erp-page-title">
+            <i class="fa-solid fa-building-user"></i>
+            @Text["고객 관리|Customer Management"]
+        </h2>
+
+        <button class="erp-btn-add" @onclick="LoadCustomersAsync">
+            <i class="fa-solid fa-rotate"></i>
+            @Text["새로고침|Refresh"]
+        </button>
+    </div>
+
+    <div class="erp-card">
+        @if (IsLoading)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status"></div>
+                <div class="fw-bold">@Text["데이터를 불러오는 중...|Loading data..."]</div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(ErrorMessage))
+        {
+            <div class="alert alert-danger">
+                <div class="fw-bold">@Text["오류가 발생했습니다.|An error occurred."]</div>
+                <div class="small">@ErrorMessage</div>
+            </div>
+        }
+        else if (Customers == null || Customers.Count == 0)
+        {
+            <div class="text-center py-5">
+                <i class="fa-solid fa-folder-open fa-3x text-muted mb-3"></i>
+                <h5>@Text["등록된 고객이 없습니다.|No customers found."]</h5>
+            </div>
+        }
+        else
+        {
+            <CustomTable DataSource="@Customers"
+                         PageSize="15"
+                         AllowFiltering="true"
+                         SearchPlaceholder="@Text["고객 검색...|Search customers..."]"
+                         WrapperClass="erp-table-premium border-0 shadow-none p-0">
+                <Columns>
+                    <TableColumn TItem="Customer" Title="@Text["회사명|Company"]" Sortable="true" Property="CompanyName">
+                        <Template>
+                            <div class="erp-link-name">@context.CompanyName</div>
+                            <div class="erp-meta-info mt-1">
+                                <i class="fa-solid fa-id-card"></i>
+                                @context.BusinessLicense
+                            </div>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Customer" Title="@Text["대표자|CEO"]" Sortable="true" Property="CeoName">
+                        <Template>
+                            <span>@context.CeoName</span>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Customer" Title="@Text["승인 상태|Approval"]" Sortable="true" Property="ApprovalStatus">
+                        <Template>
+                            <span class="@BasicCodes.CustomerApprovalStatus.GetBadgeClass(context.ApprovalStatus)">
+                                @BasicCodes.CustomerApprovalStatus.GetTextKr(context.ApprovalStatus)
+                            </span>
+
+                            @if (!string.IsNullOrWhiteSpace(context.RejectReason))
+                            {
+                                <div class="small text-danger mt-1">
+                                    @context.RejectReason
+                                </div>
+                            }
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Customer" Title="@Text["멤버십|Membership"]" Sortable="true" Property="MembershipType">
+                        <Template>
+                            <span class="@BasicCodes.MembershipType.GetBadgeClass(context.MembershipType)">
+                                @context.MembershipType
+                            </span>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Customer" Title="@Text["결제|Paid"]" Sortable="true" Property="IsPaid">
+                        <Template>
+                            @if (context.IsPaid)
+                            {
+                                <span class="badge bg-success">@Text["결제 완료|Paid"]</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">@Text["미결제|Unpaid"]</span>
+                            }
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn TItem="Customer" Title="@Text["요청일|Request Date"]" Sortable="true" Property="RequestDate">
+                        <Template>
+                            <div class="erp-meta-info fw-bold text-dark">
+                                <i class="fa-regular fa-calendar-check text-primary"></i>
+                                @context.RequestDate.ToString("yyyy-MM-dd")
+                            </div>
+                        </Template>
+                    </TableColumn>
+                </Columns>
+
+                <Actions>
+                    @if (context.ApprovalStatus != BasicCodes.CustomerApprovalStatus.Approved)
+                    {
+                        <button class="btn btn-sm btn-light text-success me-1"
+                                style="border-radius: 8px;"
+                                title="@Text["승인|Approve"]"
+                                @onclick="() => ApproveCustomerAsync(context)">
+                            <i class="fa-solid fa-check"></i>
+                        </button>
+                    }
+
+                    @if (context.ApprovalStatus != BasicCodes.CustomerApprovalStatus.Rejected)
+                    {
+                        <button class="btn btn-sm btn-light text-danger me-1"
+                                style="border-radius: 8px;"
+                                title="@Text["거절|Reject"]"
+                                @onclick="() => RejectCustomerAsync(context)">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    }
+                    <button class="btn btn-sm btn-light text-primary me-1"
+                            style="border-radius: 8px;"
+                            title="@Text["상세보기|View Details"]"
+                            @onclick="() => ViewCustomerDetail(context)">
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                    <button class="btn btn-sm btn-light text-primary me-1"
+                            style="border-radius: 8px;"
+                            title="@Text["결제 상태 변경|Toggle Paid"]"
+                            @onclick="() => TogglePaidAsync(context)">
+                        <i class="fa-solid fa-credit-card"></i>
+                    </button>
+
+                    <button class="btn btn-sm btn-light text-dark"
+                            style="border-radius: 8px;"
+                            title="@Text["멤버십 변경|Change Membership"]"
+                            @onclick="() => ChangeMembershipAsync(context)">
+                        <i class="fa-solid fa-user-gear"></i>
+                    </button>
+                </Actions>
+            </CustomTable>
+        }
+    </div>
+</div>
+
+@code {
+    private List<Customer> Customers { get; set; } = new();
+    private bool IsLoading { get; set; }
+    private string ErrorMessage { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCustomersAsync();
+    }
+
+    private async Task LoadCustomersAsync()
+    {
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = string.Empty;
+
+            Customers = await CustomerAdminService.GetCustomersAsync();
+
+            if (Customers == null)
+            {
+                Customers = new List<Customer>();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            Customers = new List<Customer>();
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+    private void ViewCustomerDetail(Customer model)
+{
+    if (model == null || model.Guid == Guid.Empty)
+    {
+        return;
+    }
+
+        NavigationManager.NavigateTo($"/admin/customers/detail/{model.Guid}");
+}
+    private async Task ApproveCustomerAsync(Customer model)
+    {
+        if (model == null || model.Guid == Guid.Empty)
+        {
+            return;
+        }
+
+        var confirm = await Alert.ConfirmDelete(
+            Text[$"'{model.CompanyName}' 고객을 승인하시겠습니까?|Approve customer '{model.CompanyName}'?"],
+            Text["승인 확인|Approve Confirmation"]
+        );
+
+        if (!confirm)
+        {
+            return;
+        }
+
+        var result = await CustomerAdminService.ApproveAsync(model.Guid);
+
+        if (result.Success)
+        {
+            model.ApprovalStatus = BasicCodes.CustomerApprovalStatus.Approved;
+            model.RejectReason = string.Empty;
+
+            await Alert.Alert(
+                Text["승인되었습니다.|Approved successfully."],
+                Text["완료|Success"]
+            );
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+
+    private async Task RejectCustomerAsync(Customer model)
+    {
+        if (model == null || model.Guid == Guid.Empty)
+        {
+            return;
+        }
+
+        var confirm = await Alert.ConfirmDelete(
+            Text[$"'{model.CompanyName}' 고객을 거절하시겠습니까?|Reject customer '{model.CompanyName}'?"],
+            Text["거절 확인|Reject Confirmation"]
+        );
+
+        if (!confirm)
+        {
+            return;
+        }
+
+        var reason = Text["관리자에 의해 거절되었습니다.|Rejected by admin."];
+
+        var result = await CustomerAdminService.RejectAsync(model.Guid, reason);
+
+        if (result.Success)
+        {
+            model.ApprovalStatus = BasicCodes.CustomerApprovalStatus.Rejected;
+            model.RejectReason = reason;
+
+            await Alert.Alert(
+                Text["거절되었습니다.|Rejected successfully."],
+                Text["완료|Success"]
+            );
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+
+    private async Task TogglePaidAsync(Customer model)
+    {
+        if (model == null || model.Guid == Guid.Empty)
+        {
+            return;
+        }
+
+        var newPaidStatus = !model.IsPaid;
+
+        var result = await CustomerAdminService.SetPaidAsync(model.Guid, newPaidStatus);
+
+        if (result.Success)
+        {
+            model.IsPaid = newPaidStatus;
+
+            await Alert.Alert(
+                Text["결제 상태가 변경되었습니다.|Payment status has been updated."],
+                Text["완료|Success"]
+            );
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+
+    private async Task ChangeMembershipAsync(Customer model)
+    {
+        if (model == null || model.Guid == Guid.Empty)
+        {
+            return;
+        }
+
+        var nextMembership = model.MembershipType switch
+        {
+            BasicCodes.MembershipType.Free => BasicCodes.MembershipType.Paid,
+            BasicCodes.MembershipType.Paid => BasicCodes.MembershipType.Enterprise,
+            _ => BasicCodes.MembershipType.Free
+        };
+
+        var result = await CustomerAdminService.SetMembershipAsync(model.Guid, nextMembership);
+
+        if (result.Success)
+        {
+            model.MembershipType = nextMembership;
+
+            await Alert.Alert(
+                Text["멤버십이 변경되었습니다.|Membership has been updated."],
+                Text["완료|Success"]
+            );
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+}

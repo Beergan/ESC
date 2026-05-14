@@ -1,11 +1,12 @@
+using ESC.CONCOST.Abstract;
+using ESC.CONCOST.Base;
+using ESC.CONCOST.ModuleManagementCore;
+using ESC.CONCOST.ModuleManagementCore.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using RestEase;
-using ESC.CONCOST.Abstract;
-using ESC.CONCOST.Base;
-using ESC.CONCOST.ModuleManagementCore;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -165,5 +166,130 @@ public class ManagementAccountService : MyServiceBase, IManagementAccountService
     public Task<bool> CheckPermissionAdmin()
     {
         return Task.FromResult(_ctx.CheckPermission(PERMISSION.ADMIN_ACCOUNTS));
+    }
+    public async Task<ResultsOf<ModelAccountListItem>> GetListAccounts()
+    {
+        try
+        {
+            var users = await _ctx.Set<SA_USER>().Where(x=>x.Id !="6f449fa3-3964-474b-b94b-efff192ef2ca")
+                .Include(x => x.Customer)
+                .AsNoTracking()
+                .ToListAsync();
+
+            var employees = await _ctx.Set<EntityEmployee>()
+                .AsNoTracking()
+                .ToListAsync();
+
+            var result = new List<ModelAccountListItem>();
+
+            // 1. Nhân sự nội bộ: lấy từ EntityEmployee, left join SA_USER
+            foreach (var employee in employees)
+            {
+                var user = users.FirstOrDefault(x => x.GuidEmployee == employee.Guid);
+
+                result.Add(new ModelAccountListItem
+                {
+                    AccountType = BasicCodes.AccountType.Employee,
+
+                    UserId = user?.Id ?? string.Empty,
+                    UserName = string.IsNullOrWhiteSpace(user?.UserName) ? "-" : user.UserName,
+                    Email = employee.Email ?? user?.Email ?? string.Empty,
+                    Phone = employee.Phone
+                        ?? employee.Mobile1
+                        ?? employee.Mobile2
+                        ?? user?.PhoneNumber
+                        ?? string.Empty,
+
+                    Active = user == null ? null : user.Active,
+
+                    GuidEmployee = employee.Guid,
+                    EmployeeCode = employee.EmployeeCode ?? string.Empty,
+
+                    FirstName = employee.FirstName ?? string.Empty,
+                    LastName = employee.LastName ?? string.Empty,
+                    DisplayName = employee.FullName
+                });
+            }
+
+            // 2. Khách hàng ESC: lấy từ SA_USER có CustomerId
+            var customerUsers = users
+                .Where(x => x.CustomerId.HasValue)
+                .ToList();
+
+            foreach (var user in customerUsers)
+            {
+                var customer = user.Customer;
+
+                result.Add(new ModelAccountListItem
+                {
+                    AccountType = BasicCodes.AccountType.Customer,
+
+                    UserId = user.Id,
+                    UserName = user.UserName ?? "-",
+                    Email = user.Email ?? string.Empty,
+                    Phone = user.PhoneNumber ?? string.Empty,
+                    Active = user.Active,
+
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty,
+
+                    CustomerId = user.CustomerId,
+                    CustomerGuid = customer?.Guid,
+                    CompanyName = customer?.CompanyName ?? string.Empty,
+                    BusinessLicense = customer?.BusinessLicense ?? string.Empty,
+                    CeoName = customer?.CeoName ?? string.Empty,
+                    CustomerApprovalStatus = customer?.ApprovalStatus,
+                    IsPaid = customer?.IsPaid,
+                    MembershipType = customer?.MembershipType ?? string.Empty,
+                    RequestDate = customer?.RequestDate,
+
+                    DisplayName = !string.IsNullOrWhiteSpace(customer?.CompanyName)
+                        ? customer.CompanyName
+                        : $"{user.LastName} {user.FirstName}".Trim()
+                });
+            }
+
+            // 3. Admin/System user: user không gắn employee và không gắn customer
+            var adminUsers = users
+                .Where(x => !x.CustomerId.HasValue && !x.GuidEmployee.HasValue)
+                .ToList();
+
+            foreach (var user in adminUsers)
+            {
+                var displayName = $"{user.LastName} {user.FirstName}".Trim();
+
+                if (string.IsNullOrWhiteSpace(displayName))
+                {
+                    displayName = user.UserName ?? "Admin";
+                }
+
+                result.Add(new ModelAccountListItem
+                {
+                    AccountType = BasicCodes.AccountType.Admin,
+
+                    UserId = user.Id,
+                    UserName = user.UserName ?? "-",
+                    Email = user.Email ?? string.Empty,
+                    Phone = user.PhoneNumber ?? string.Empty,
+                    Active = user.Active,
+
+                    FirstName = user.FirstName ?? string.Empty,
+                    LastName = user.LastName ?? string.Empty,
+                    DisplayName = displayName
+                });
+            }
+
+            var ordered = result
+                .OrderBy(x => x.AccountType == BasicCodes.AccountType.Admin ? 0 : x.AccountType == BasicCodes.AccountType.Employee ? 1 : 2)
+                .ThenBy(x => x.DisplayName)
+                .ToList();
+
+            return ResultsOf<ModelAccountListItem>.Ok(ordered);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError($"{_ctx.Summary} - {ex.Message}");
+            return ResultsOf<ModelAccountListItem>.Error("Đã có lỗi xảy ra khi tải danh sách tài khoản!");
+        }
     }
 }

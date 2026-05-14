@@ -20,7 +20,4 @@
 	  <ProjectReference Include="..\ESC.CONCOST.ModuleESCCore\ESC.CONCOST.ModuleESCCore.csproj" />
 	  <ProjectReference Include="..\ESC.CONCOST.SharedComponents\ESC.CONCOST.SharedComponents.csproj" />
 	</ItemGroup>
-	<ItemGroup>
-	  <Folder Include="Pages\" />
-	</ItemGroup>
 </Project>

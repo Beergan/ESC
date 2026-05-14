@@ -13,7 +13,11 @@ public interface IESCService : IServiceBase
 {
     [Get("GetContracts")]
     Task<List<Contract>> GetContractsAsync();
+    [Get("GetContract/{guid}")]
+    Task<ResultOf<ContractWizardDto>> GetContractAsync([Path] Guid guid);
 
+    [Put("UpdateContract/{guid}")]
+    Task<ResultOf<Contract>> UpdateContractAsync([Path] Guid guid, [Body] ContractWizardDto model);
     [Post("CreateContract")]
     Task<ResultOf<Contract>> CreateContractAsync(ContractWizardDto model);
 

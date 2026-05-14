@@ -244,6 +244,11 @@
                     @onclick='() => Navigate("/settings/contract-categories", "settings")'>
                 <i class="fa-solid fa-file-contract me-1"></i> @Text["계약구분|Contract Methods"]
             </button>
+             <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/admin/customers") ? "active" : "")"
+                    @onclick='() => Navigate("/admin/customers", "settings")'>
+                 <i class="fa-solid fa-building-user"></i>   @Text["고객 관리|Customer Management"]
+            </button>
+  
         }
     </nav>
 
@@ -386,7 +391,7 @@
 @* === MAIN CONTENT === *@
 <div class="main-page-wrapper" id="main-content"
      style="min-height:calc(100vh - 70px); overflow-y:auto; background:var(--bg);">
-    <div class="container-fluid py-4" style="max-width: 1280px;">
+    <div class="container-fluid " style="max-width: 1290px;">
         @Body
     </div>
 </div>

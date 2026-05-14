@@ -1,0 +1,666 @@
+﻿@page "/admin/customers/detail/{CustomerGuid:guid}"
+@attribute [Authorize]
+@using ESC.CONCOST.Abstract
+@using ESC.CONCOST.ModuleESCCore.Interfaces
+@inject ITextTranslator Text
+@inject ICustomerAdminService CustomerAdminService
+@inject ISweetAlertService Alert
+@inject NavigationManager Navigation
+<div class="erp-container">
+<div class="customer-detail-page">
+    <div class="detail-header">
+        <div>
+            <div class="page-kicker">
+                <i class="fa-solid fa-building-user"></i>
+                @Text["관리자 설정|Admin Settings"]
+            </div>
+
+            <h2 class="page-title">
+                @Text["고객 상세 정보|Customer Detail"]
+            </h2>
+
+            <div class="page-desc">
+                @Text["고객 승인 상태, 결제 상태 및 멤버십 정보를 관리합니다.|Manage customer approval, payment status and membership information."]
+            </div>
+        </div>
+
+        <button class="btn-back" @onclick="BackToList">
+            <i class="fa-solid fa-arrow-left"></i>
+            @Text["목록으로|Back to List"]
+        </button>
+    </div>
+
+    @if (IsLoading)
+    {
+        <div class="customer-card loading-card">
+            <div class="spinner-border text-primary mb-3" role="status"></div>
+            <div class="fw-bold">@Text["데이터를 불러오는 중...|Loading data..."]</div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(ErrorMessage))
+    {
+        <div class="alert alert-danger customer-alert">
+            <div class="fw-bold">@Text["오류가 발생했습니다.|An error occurred."]</div>
+            <div class="small">@ErrorMessage</div>
+        </div>
+    }
+    else if (Customer == null)
+    {
+        <div class="customer-card empty-card">
+            <i class="fa-solid fa-folder-open"></i>
+            <h5>@Text["고객 정보를 찾을 수 없습니다.|Customer information was not found."]</h5>
+        </div>
+    }
+    else
+    {
+        <div class="customer-summary-card">
+            <div class="summary-left">
+                <div class="company-icon">
+                    <i class="fa-solid fa-building"></i>
+                </div>
+
+                <div>
+                    <h3>@Customer.CompanyName</h3>
+
+                    <div class="summary-meta">
+                        <span>
+                            <i class="fa-solid fa-id-card"></i>
+                            @Customer.BusinessLicense
+                        </span>
+
+                        <span>
+                            <i class="fa-solid fa-user-tie"></i>
+                            @Customer.CeoName
+                        </span>
+
+                        <span>
+                            <i class="fa-regular fa-calendar-check"></i>
+                            @Customer.RequestDate.ToString("yyyy-MM-dd HH:mm")
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="summary-badges">
+                <span class="@BasicCodes.CustomerApprovalStatus.GetBadgeClass(Customer.ApprovalStatus)">
+                    @BasicCodes.CustomerApprovalStatus.GetTextKr(Customer.ApprovalStatus)
+                </span>
+
+                <span class="@BasicCodes.MembershipType.GetBadgeClass(Customer.MembershipType)">
+                    @Customer.MembershipType
+                </span>
+
+                @if (Customer.IsPaid)
+                {
+                    <span class="badge bg-success">@Text["결제 완료|Paid"]</span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary">@Text["미결제|Unpaid"]</span>
+                }
+            </div>
+        </div>
+
+        <div class="customer-grid">
+            <div class="customer-card">
+                <div class="section-title">
+                    <i class="fa-solid fa-circle-info"></i>
+                    @Text["기본 정보|Basic Information"]
+                </div>
+
+                <div class="info-list">
+                    <div class="info-row">
+                        <div class="info-label">@Text["회사명|Company Name"]</div>
+                        <div class="info-value">@Customer.CompanyName</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">@Text["사업자등록번호|Business License"]</div>
+                        <div class="info-value">@Customer.BusinessLicense</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">@Text["대표자|CEO"]</div>
+                        <div class="info-value">@Customer.CeoName</div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-label">@Text["요청일|Request Date"]</div>
+                        <div class="info-value">@Customer.RequestDate.ToString("yyyy-MM-dd HH:mm")</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="customer-card">
+                <div class="section-title">
+                    <i class="fa-solid fa-user-gear"></i>
+                    @Text["관리 상태|Management Status"]
+                </div>
+
+                <div class="status-panel">
+                    <div class="status-item">
+                        <div class="status-label">@Text["승인 상태|Approval Status"]</div>
+                        <div>
+                            <span class="@BasicCodes.CustomerApprovalStatus.GetBadgeClass(Customer.ApprovalStatus)">
+                                @BasicCodes.CustomerApprovalStatus.GetTextKr(Customer.ApprovalStatus)
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="status-item">
+                        <div class="status-label">@Text["멤버십|Membership"]</div>
+                        <div>
+                            <span class="@BasicCodes.MembershipType.GetBadgeClass(Customer.MembershipType)">
+                                @Customer.MembershipType
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="status-item">
+                        <div class="status-label">@Text["결제 상태|Payment Status"]</div>
+                        <div>
+                            @if (Customer.IsPaid)
+                            {
+                                <span class="badge bg-success">@Text["결제 완료|Paid"]</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">@Text["미결제|Unpaid"]</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(Customer.RejectReason))
+                {
+                    <div class="reject-box">
+                        <div class="fw-bold">@Text["거절 사유|Reject Reason"]</div>
+                        <div>@Customer.RejectReason</div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="customer-action-card">
+            <div>
+                <div class="section-title mb-1">
+                    <i class="fa-solid fa-bolt"></i>
+                    @Text["빠른 작업|Quick Actions"]
+                </div>
+                <div class="action-desc">
+                    @Text["고객의 승인, 결제 및 멤버십 상태를 변경할 수 있습니다.|You can update approval, payment and membership status."]
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                @if (Customer.ApprovalStatus != BasicCodes.CustomerApprovalStatus.Approved)
+                {
+                    <button class="action-btn approve" @onclick="ApproveCustomerAsync">
+                        <i class="fa-solid fa-check"></i>
+                        @Text["승인|Approve"]
+                    </button>
+                }
+
+                @if (Customer.ApprovalStatus != BasicCodes.CustomerApprovalStatus.Rejected)
+                {
+                    <button class="action-btn reject" @onclick="RejectCustomerAsync">
+                        <i class="fa-solid fa-xmark"></i>
+                        @Text["거절|Reject"]
+                    </button>
+                }
+
+                <button class="action-btn paid" @onclick="TogglePaidAsync">
+                    <i class="fa-solid fa-credit-card"></i>
+                    @Text["결제 상태 변경|Toggle Paid"]
+                </button>
+
+                <button class="action-btn membership" @onclick="ChangeMembershipAsync">
+                    <i class="fa-solid fa-user-gear"></i>
+                    @Text["멤버십 변경|Change Membership"]
+                </button>
+            </div>
+        </div>
+    }
+</div>
+</div>
+<style>
+    .detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 28px;
+    }
+
+    .page-kicker {
+        color: #1f4e79;
+        font-weight: 800;
+        font-size: 14px;
+        margin-bottom: 8px;
+    }
+
+    .page-title {
+        font-size: 30px;
+        font-weight: 900;
+        color: #14345b;
+        margin: 0;
+    }
+
+    .page-desc {
+        margin-top: 8px;
+        color: #6d7b8a;
+        font-size: 14px;
+    }
+
+    .btn-back {
+        border: 0;
+        background: #ffffff;
+        color: #1c3554;
+        padding: 12px 18px;
+        border-radius: 14px;
+        font-weight: 800;
+        box-shadow: 0 10px 28px rgba(20, 52, 91, .08);
+    }
+
+    .customer-summary-card,
+    .customer-card,
+    .customer-action-card {
+        background: #ffffff;
+        border-radius: 24px;
+        box-shadow: 0 18px 45px rgba(20, 52, 91, .08);
+        border: 1px solid rgba(216, 225, 236, .7);
+    }
+
+    .customer-summary-card {
+        padding: 28px 32px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    .summary-left {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+    }
+
+    .company-icon {
+        width: 58px;
+        height: 58px;
+        border-radius: 18px;
+        background: #e8f4fb;
+        color: #143f6b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+    }
+
+    .summary-left h3 {
+        margin: 0 0 8px 0;
+        font-size: 24px;
+        font-weight: 900;
+    }
+
+    .summary-meta {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        color: #657386;
+        font-size: 13px;
+    }
+
+        .summary-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+    .summary-badges {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .customer-grid {
+        display: grid;
+        grid-template-columns: 1.4fr .9fr;
+        gap: 24px;
+        margin-bottom: 24px;
+    }
+
+    .customer-card {
+        padding: 28px 32px;
+    }
+
+    .loading-card,
+    .empty-card {
+        text-align: center;
+        padding: 60px;
+    }
+
+        .empty-card i {
+            font-size: 46px;
+            color: #b5c0cc;
+            margin-bottom: 16px;
+        }
+
+    .section-title {
+        color: #14345b;
+        font-size: 17px;
+        font-weight: 900;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+
+    .info-list {
+        display: grid;
+        gap: 14px;
+    }
+
+    .info-row {
+        border: 1px solid #e8edf4;
+        background: #fbfcfe;
+        border-radius: 16px;
+        padding: 16px 18px;
+    }
+
+    .info-label {
+        color: #6d7b8a;
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+
+    .info-value {
+        color: #172b44;
+        font-size: 15px;
+        font-weight: 900;
+    }
+
+    .status-panel {
+        display: grid;
+        gap: 14px;
+    }
+
+    .status-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid #e8edf4;
+        background: #fbfcfe;
+        border-radius: 16px;
+        padding: 16px 18px;
+    }
+
+    .status-label {
+        color: #6d7b8a;
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    .reject-box {
+        margin-top: 18px;
+        border-radius: 16px;
+        background: #fff2f2;
+        color: #b42318;
+        padding: 16px 18px;
+        border: 1px solid #ffd2d2;
+    }
+
+    .customer-action-card {
+        padding: 26px 32px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 24px;
+    }
+
+    .action-desc {
+        color: #6d7b8a;
+        font-size: 14px;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .action-btn {
+        border: 0;
+        border-radius: 12px;
+        padding: 11px 16px;
+        font-weight: 900;
+        color: #ffffff;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+        .action-btn.approve {
+            background: #12805c;
+        }
+
+        .action-btn.reject {
+            background: #dc3545;
+        }
+
+        .action-btn.paid {
+            background: #1769e0;
+        }
+
+        .action-btn.membership {
+            background: #222831;
+        }
+
+    .customer-alert {
+        border-radius: 18px;
+        padding: 20px 24px;
+    }
+
+    @@media (max-width: 992px) {
+        .customer-detail-page {
+            padding: 28px 18px;
+        }
+
+        .detail-header,
+        .customer-summary-card,
+        .customer-action-card {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .customer-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .action-buttons {
+            justify-content: flex-start;
+        }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public Guid CustomerGuid { get; set; }
+
+    private Customer? Customer { get; set; }
+    private bool IsLoading { get; set; }
+    private string ErrorMessage { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCustomerAsync();
+    }
+
+    private async Task LoadCustomerAsync()
+    {
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = string.Empty;
+
+            var result = await CustomerAdminService.GetCustomerAsync(CustomerGuid);
+
+            if (result == null || !result.Success || result.Item == null)
+            {
+                ErrorMessage = string.IsNullOrWhiteSpace(result?.Message)
+                    ? Text["고객 정보를 불러올 수 없습니다.|Cannot load customer detail."]
+                    : result.Message;
+
+                Customer = null;
+                return;
+            }
+
+            Customer = result.Item;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+            Customer = null;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void BackToList()
+    {
+        Navigation.NavigateTo("/admin/customers");
+    }
+
+    private async Task ApproveCustomerAsync()
+    {
+        if (Customer == null)
+        {
+            return;
+        }
+
+        var confirm = await Alert.ConfirmDelete(
+            Text[$"'{Customer.CompanyName}' 고객을 승인하시겠습니까?|Approve customer '{Customer.CompanyName}'?"],
+            Text["승인 확인|Approve Confirmation"]
+        );
+
+        if (!confirm)
+        {
+            return;
+        }
+
+        var result = await CustomerAdminService.ApproveAsync(Customer.Guid);
+
+        if (result.Success)
+        {
+            Customer.ApprovalStatus = BasicCodes.CustomerApprovalStatus.Approved;
+            Customer.RejectReason = string.Empty;
+
+            await Alert.Alert(
+                Text["승인되었습니다.|Approved successfully."],
+                Text["완료|Success"]
+            );
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+
+    private async Task RejectCustomerAsync()
+    {
+        if (Customer == null)
+        {
+            return;
+        }
+
+        var confirm = await Alert.ConfirmDelete(
+            Text[$"'{Customer.CompanyName}' 고객을 거절하시겠습니까?|Reject customer '{Customer.CompanyName}'?"],
+            Text["거절 확인|Reject Confirmation"]
+        );
+
+        if (!confirm)
+        {
+            return;
+        }
+
+        var reason = Text["관리자에 의해 거절되었습니다.|Rejected by admin."];
+
+        var result = await CustomerAdminService.RejectAsync(Customer.Guid, reason);
+
+        if (result.Success)
+        {
+            Customer.ApprovalStatus = BasicCodes.CustomerApprovalStatus.Rejected;
+            Customer.RejectReason = reason;
+
+            await Alert.Alert(
+                Text["거절되었습니다.|Rejected successfully."],
+                Text["완료|Success"]
+            );
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+
+    private async Task TogglePaidAsync()
+    {
+        if (Customer == null)
+        {
+            return;
+        }
+
+        var newPaidStatus = !Customer.IsPaid;
+
+        var result = await CustomerAdminService.SetPaidAsync(Customer.Guid, newPaidStatus);
+
+        if (result.Success)
+        {
+            Customer.IsPaid = newPaidStatus;
+
+            await Alert.Alert(
+                Text["결제 상태가 변경되었습니다.|Payment status has been updated."],
+                Text["완료|Success"]
+            );
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+
+    private async Task ChangeMembershipAsync()
+    {
+        if (Customer == null)
+        {
+            return;
+        }
+
+        var nextMembership = Customer.MembershipType switch
+        {
+            BasicCodes.MembershipType.Free => BasicCodes.MembershipType.Paid,
+            BasicCodes.MembershipType.Paid => BasicCodes.MembershipType.Enterprise,
+            _ => BasicCodes.MembershipType.Free
+        };
+
+        var result = await CustomerAdminService.SetMembershipAsync(Customer.Guid, nextMembership);
+
+        if (result.Success)
+        {
+            Customer.MembershipType = nextMembership;
+
+            await Alert.Alert(
+                Text["멤버십이 변경되었습니다.|Membership has been updated."],
+                Text["완료|Success"]
+            );
+        }
+        else
+        {
+            await Alert.Error(result.Message, Text["오류|Error"]);
+        }
+    }
+}

@@ -77,7 +77,12 @@
                             title="@Text["상세보기|View Details"]">
                         <i class="fa-solid fa-arrow-right"></i>
                     </button>
-
+                    <button class="btn btn-sm btn-light text-warning me-1"
+                            style="border-radius: 8px;"
+                            title="@Text["수정|Edit"]"
+                            @onclick="() => EditContract(context)">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
                     <button class="btn btn-sm btn-light text-danger"
                             style="border-radius: 8px;"
                             title="@Text["삭제|Delete"]"
@@ -100,16 +105,10 @@
         {
             IsLoading = true;
             Contracts = await ESCService.GetContractsAsync();
-            
-            if (Contracts == null || Contracts.Count == 0)
-            {
-                LoadSampleData();
-            }
         }
         catch(Exception ex)
         {
             Console.WriteLine($"Error fetching contracts: {ex.Message}");
-            LoadSampleData();
         }
         finally
         {
@@ -117,25 +116,14 @@
         }
     }
 
-    private void LoadSampleData()
+    private void EditContract(Contract model)
     {
-        Contracts = new List<Contract>
+        if (model == null || model.Guid == Guid.Empty)
         {
-            new Contract { 
-                ProjectName = "조천정수장 고도정수처리시설 전기공사", 
-                Client = "한국수자원공사", 
-                WorkType = "전기공사",
-                ContractDate = new DateTime(2024, 1, 15),
-                ContractAmount = 1250000000 
-            },
-            new Contract { 
-                ProjectName = "A-Project Water Treatment Plant Construction", 
-                Client = "Ministry of Infrastructure", 
-                WorkType = "Civil Works",
-                ContractDate = new DateTime(2024, 3, 20),
-                ContractAmount = 4800000000 
-            }
-        };
+            return;
+        }
+
+        Navigation.NavigateTo($"/escalation/edit/{model.Guid}");
     }
     private async Task ConfirmDelete(Contract model)
     {

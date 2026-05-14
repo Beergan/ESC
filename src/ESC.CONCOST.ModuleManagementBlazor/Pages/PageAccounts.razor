@@ -5,55 +5,179 @@
 @inject ISweetAlertService swal
 @inject ITextTranslator Text
 @inject NavigationManager NavigationManager
+@using ESC.CONCOST.Abstract
+@using ESC.CONCOST.ModuleManagementCore
+@using ESC.CONCOST.ModuleManagementCore.Models
 @using ESC.CONCOST.SharedComponents.Components
+@using System.Threading.Tasks
 
-<div class="erp-container">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="erp-page-title">
-            <i class="fa-solid fa-user-gear"></i>
-            @Text["계정 관리|Account Management"]
-        </h2>
+<div class="erp-container account-management-page">
+    <div class="account-page-header">
+        <div>
+            <h2 class="erp-page-title mb-1">
+                <i class="fa-solid fa-user-gear"></i>
+                @Text["계정 통합 관리|Unified Account Management"]
+            </h2>
+            <div class="text-muted small">
+                @Text["임직원, 고객 및 관리자 계정을 통합 관리합니다.|Manage employee, customer and admin accounts in one place."]
+            </div>
+        </div>
+
+        <button class="btn btn-light border fw-bold" style="border-radius: 10px;" @onclick="ResetData">
+            <i class="fa-solid fa-rotate me-1"></i>
+            @Text["새로고침|Refresh"]
+        </button>
     </div>
 
+    @if (_checkPermissionAdmin)
+    {
+        <div class="account-summary-row">
+            <div class="account-summary-card">
+                <div class="summary-label">@Text["전체 계정|All Accounts"]</div>
+                <div class="summary-value">@_dataSource.Count()</div>
+            </div>
+
+            <div class="account-summary-card">
+                <div class="summary-label">@Text["임직원|Employees"]</div>
+                <div class="summary-value">@_dataSource.Count(x => x.AccountType == BasicCodes.AccountType.Employee)</div>
+            </div>
+
+            <div class="account-summary-card">
+                <div class="summary-label">@Text["고객|Customers"]</div>
+                <div class="summary-value">@_dataSource.Count(x => x.AccountType == BasicCodes.AccountType.Customer)</div>
+            </div>
+
+            <div class="account-summary-card">
+                <div class="summary-label">@Text["관리자|Admins"]</div>
+                <div class="summary-value">@_dataSource.Count(x => x.AccountType == BasicCodes.AccountType.Admin)</div>
+            </div>
+
+            <div class="account-summary-card">
+                <div class="summary-label">@Text["미등록|Not Created"]</div>
+                <div class="summary-value">@_dataSource.Count(x => !x.HasUser)</div>
+            </div>
+        </div>
+
+        <div class="account-tabs">
+            <button class="@GetTabClass(AccountFilterAll)" @onclick="() => SetFilter(AccountFilterAll)">
+                @Text["전체|All"]
+            </button>
+
+            <button class="@GetTabClass(BasicCodes.AccountType.Employee)" @onclick="() => SetFilter(BasicCodes.AccountType.Employee)">
+                @Text["임직원|Employees"]
+            </button>
+
+            <button class="@GetTabClass(BasicCodes.AccountType.Customer)" @onclick="() => SetFilter(BasicCodes.AccountType.Customer)">
+                @Text["고객|Customers"]
+            </button>
+
+            <button class="@GetTabClass(BasicCodes.AccountType.Admin)" @onclick="() => SetFilter(BasicCodes.AccountType.Admin)">
+                @Text["관리자|Admins"]
+            </button>
+
+            <button class="@GetTabClass(AccountFilterNotCreated)" @onclick="() => SetFilter(AccountFilterNotCreated)">
+                @Text["미등록|Not Created"]
+            </button>
+
+            <button class="@GetTabClass(AccountFilterLocked)" @onclick="() => SetFilter(AccountFilterLocked)">
+                @Text["잠김|Locked"]
+            </button>
+        </div>
+    }
+
     <div class="erp-card">
-        @if (_checkPermissionAdmin)
+        @if (!_checkPermissionAdmin)
         {
-            <CustomTable DataSource="@_dataSource"
+            <div class="text-center py-5">
+                <i class="fa-solid fa-lock fs-1 text-muted opacity-20 mb-3"></i>
+                <h5 class="fw-bold">@Text["접근 권한이 없습니다!|Access Denied"]</h5>
+            </div>
+        }
+        else if (_isLoading)
+        {
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status"></div>
+                <div class="fw-bold">@Text["데이터를 불러오는 중...|Loading data..."]</div>
+            </div>
+        }
+        else
+        {
+            <CustomTable DataSource="@FilteredAccounts.ToList()"
                          PageSize="20"
                          WrapperClass="erp-table-premium border-0 shadow-none p-0"
                          AllowFiltering="true"
-                         SearchPlaceholder="@Text["직원 이름 검색...|Search employees..."]">
+                         SearchPlaceholder="@Text["이름, 회사명, 이메일, 사용자 ID 검색...|Search name, company, email, username..."]">
                 <Columns>
-                    <TableColumn TItem="ModelEmployeeAccount" Title="@Text["성명|Name"]" Sortable="true" Property="FullName">
+                    <TableColumn Title="@Text["구분|Type"]" Sortable="true" Property="AccountType">
+                        <Template>
+                            <span class="@BasicCodes.AccountType.GetBadgeClass(context.AccountType)">
+                                @BasicCodes.AccountType.GetTextKr(context.AccountType)
+                            </span>
+                        </Template>
+                    </TableColumn>
+
+                    <TableColumn Title="@Text["이름 / 회사명|Name / Company"]" Sortable="true" Property="DisplayName">
                         <Template>
                             <div class="d-flex align-items-center">
                                 <div class="erp-avatar-circle me-3">
-                                    @(string.IsNullOrEmpty(context.FullName) ? "?" : context.FullName[0].ToString().ToUpper())
+                                    @GetAvatarText(context)
                                 </div>
+
                                 <div>
-                                    <a class="erp-link-name" href="/employee/profile/@context.GuidEmployee">
-                                        @context.FullName
-                                    </a>
-                                    <div class="erp-meta-info" style="text-transform: uppercase; letter-spacing: 0.5px; font-size: 11px;">
-                                        @(Text.IsKorean ? context.JobNameKo : context.JobNameVi)
+                                    <div class="erp-link-name" role="button" @onclick="() => ViewDetail(context)">
+                                        @context.DisplayName
+                                    </div>
+
+                                    <div class="erp-meta-info" style="font-size: 11px;">
+                                        @if (context.AccountType == BasicCodes.AccountType.Employee)
+                                        {
+                                            <span>
+                                                <i class="fa-solid fa-id-badge me-1"></i>
+                                                @Text["임직원|Employee"]
+                                                @if (!string.IsNullOrWhiteSpace(context.EmployeeCode))
+                                                {
+                                                    <span> · @context.EmployeeCode</span>
+                                                }
+                                            </span>
+                                        }
+                                        else if (context.AccountType == BasicCodes.AccountType.Customer)
+                                        {
+                                            <span>
+                                                <i class="fa-solid fa-building me-1"></i>
+                                                @context.BusinessLicense
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span>
+                                                <i class="fa-solid fa-shield-halved me-1"></i>
+                                                @Text["시스템 관리자|System Admin"]
+                                            </span>
+                                        }
                                     </div>
                                 </div>
                             </div>
                         </Template>
                     </TableColumn>
-                    
-                    <TableColumn TItem="ModelEmployeeAccount" Title="@Text["이메일 / 연락처|Email / Phone"]">
+
+                    <TableColumn Title="@Text["이메일 / 연락처|Email / Phone"]" Sortable="true" Property="Email">
                         <Template>
                             <div class="erp-meta-info" style="flex-direction: column; align-items: flex-start; gap: 2px;">
-                                <div class="text-dark"><i class="fa-solid fa-envelope me-1 opacity-50"></i> @context.Email</div>
-                                <div class="text-muted"><i class="fa-solid fa-phone me-1 opacity-50"></i> @context.Phone</div>
+                                <div class="text-dark">
+                                    <i class="fa-solid fa-envelope me-1 opacity-50"></i>
+                                    @(string.IsNullOrWhiteSpace(context.Email) ? "-" : context.Email)
+                                </div>
+                                <div class="text-muted">
+                                    <i class="fa-solid fa-phone me-1 opacity-50"></i>
+                                    @(string.IsNullOrWhiteSpace(context.Phone) ? "-" : context.Phone)
+                                </div>
                             </div>
                         </Template>
                     </TableColumn>
 
-                    <TableColumn TItem="ModelEmployeeAccount" Title="@Text["사용자 ID|User ID"]" Sortable="true" Property="UserName">
+                    <TableColumn Title="@Text["사용자 ID|User ID"]" Sortable="true" Property="UserName">
                         <Template>
-                            @if (context.UserName != "-")
+                            @if (context.HasUser)
                             {
                                 <span class="badge bg-light text-navy fw-bold border" style="font-size: 11px; padding: 5px 10px; border-radius: 8px;">
                                     @context.UserName
@@ -66,40 +190,74 @@
                         </Template>
                     </TableColumn>
 
-                    <TableColumn TItem="ModelEmployeeAccount" Title="@Text["상태|Status"]" Sortable="true">
+                    <TableColumn Title="@Text["상태|Status"]" Sortable="true" Property="Active">
                         <Template>
-                            @if (context.Locked == null)
-                            {
-                                <span class="erp-badge-status bg-warning-soft text-warning">
-                                    <i class="fa-solid fa-user-clock"></i> @Text["미등록|Not Created"]
-                                </span>
-                            }
-                            else if (context.Locked == true)
-                            {
-                                <span class="erp-badge-status bg-success-soft text-success">
-                                    <i class="fa-solid fa-user-check"></i> @Text["사용 중|Active"]
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="erp-badge-status bg-danger-soft text-danger">
-                                    <i class="fa-solid fa-user-slash"></i> @Text["잠김|Locked"]
-                                </span>
-                            }
+                            <div class="d-flex flex-wrap gap-1">
+                                @if (!context.HasUser || context.Active == null)
+                                {
+                                    <span class="erp-badge-status bg-warning-soft text-warning">
+                                        <i class="fa-solid fa-user-clock"></i>
+                                        @Text["미등록|Not Created"]
+                                    </span>
+                                }
+                                else if (context.Active == true)
+                                {
+                                    <span class="erp-badge-status bg-success-soft text-success">
+                                        <i class="fa-solid fa-user-check"></i>
+                                        @Text["사용 중|Active"]
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="erp-badge-status bg-danger-soft text-danger">
+                                        <i class="fa-solid fa-user-slash"></i>
+                                        @Text["잠김|Locked"]
+                                    </span>
+                                }
+
+                                @if (context.AccountType == BasicCodes.AccountType.Customer && context.CustomerApprovalStatus.HasValue)
+                                {
+                                    <span class="@BasicCodes.CustomerApprovalStatus.GetBadgeClass(context.CustomerApprovalStatus.Value)">
+                                        @BasicCodes.CustomerApprovalStatus.GetTextKr(context.CustomerApprovalStatus.Value)
+                                    </span>
+                                }
+
+                                @if (context.AccountType == BasicCodes.AccountType.Customer && !string.IsNullOrWhiteSpace(context.MembershipType))
+                                {
+                                    <span class="@BasicCodes.MembershipType.GetBadgeClass(context.MembershipType)">
+                                        @context.MembershipType
+                                    </span>
+                                }
+                            </div>
                         </Template>
                     </TableColumn>
                 </Columns>
+
                 <Actions>
                     <div class="d-flex gap-2">
-                        @if (context.UserName == "-")
+                        <button class="btn btn-sm btn-light text-primary"
+                                style="border-radius: 8px;"
+                                @onclick="() => ViewDetail(context)"
+                                title="@Text["상세보기|View Details"]">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+
+                        @if (context.AccountType == BasicCodes.AccountType.Employee && !context.HasUser)
                         {
-                            <button class="btn btn-sm btn-light text-primary" style="border-radius: 8px;" @onclick="() => OpenCreateModal(context)" title="@Text["계정 생성|Create Account"]">
+                            <button class="btn btn-sm btn-light text-success"
+                                    style="border-radius: 8px;"
+                                    @onclick="() => OpenCreateModal(context)"
+                                    title="@Text["계정 생성|Create Account"]">
                                 <i class="fa-solid fa-user-plus"></i>
                             </button>
                         }
-                        else
+
+                        @if (context.HasUser)
                         {
-                            <button class="btn btn-sm btn-light text-orange" style="border-radius: 8px;" @onclick="() => OpenChangePasswordModal(context)" title="@Text["비밀번호 변경|Change Password"]">
+                            <button class="btn btn-sm btn-light text-orange"
+                                    style="border-radius: 8px;"
+                                    @onclick="() => OpenChangePasswordModal(context)"
+                                    title="@Text["비밀번호 변경|Change Password"]">
                                 <i class="fa-solid fa-key"></i>
                             </button>
                         }
@@ -107,39 +265,36 @@
                 </Actions>
             </CustomTable>
         }
-        else
-        {
-            <div class="text-center py-5">
-                <i class="fa-solid fa-lock fs-1 text-muted opacity-20 mb-3"></i>
-                <h5 class="fw-bold">@Text["접근 권한이 없습니다!|Access Denied"]</h5>
-            </div>
-        }
     </div>
 </div>
 
-@* Modal: Tạo tài khoản *@
 <ModalComponent @ref="_modalEdit" Title="@_modalEditTitle" OnConfirm="OnFormEditSubmit">
     <EditForm Model="@_modelEdit" id="accountForm">
         <DataAnnotationsValidator />
+
         <div class="row g-4">
             <div class="col-md-6">
                 <label class="form-label-bold">@Text["성|Last Name"]</label>
                 <input type="text" class="form-control-custom bg-light" value="@_modelEdit.LastName" disabled />
             </div>
+
             <div class="col-md-6">
                 <label class="form-label-bold">@Text["이름|First Name"]</label>
                 <input type="text" class="form-control-custom bg-light" value="@_modelEdit.FirstName" disabled />
             </div>
+
             <div class="col-md-12">
                 <label class="form-label-bold">@Text["사용자 ID|User ID"] *</label>
                 <InputText class="form-control-custom" @bind-Value="_modelEdit.UserName" placeholder="@Text["사용자 ID|User ID"]" />
                 <CustomValidationMessage For="@(() => _modelEdit.UserName)" />
             </div>
+
             <div class="col-md-12">
                 <label class="form-label-bold">@Text["비밀번호|Password"] *</label>
-                <InputText class="form-control-custom" @bind-Value="_modelEdit.Password" placeholder="@Text["비밀번호|Password"]" />
+                <InputText type="password" class="form-control-custom" @bind-Value="_modelEdit.Password" placeholder="@Text["비밀번호|Password"]" />
                 <CustomValidationMessage For="@(() => _modelEdit.Password)" />
             </div>
+
             <div class="col-md-12">
                 <label class="form-label-bold">@Text["권한 그룹|Permission Group"] *</label>
                 <select class="form-select form-control-custom" @bind="_modelEdit.GuidPrimissions">
@@ -155,20 +310,22 @@
     </EditForm>
 </ModalComponent>
 
-@* Modal: Đổi mật khẩu *@
 <ModalComponent @ref="_modalPwd" Title="@Text["비밀번호 변경|Change Password"]" OnConfirm="OnFormPwdChangeSubmit">
     <EditForm Model="@_modelPwdChange" id="pwdForm">
         <DataAnnotationsValidator />
+
         <div class="row g-4">
             <div class="col-12">
                 <label class="form-label-bold">@Text["사용자 ID|User ID"]</label>
                 <input type="text" class="form-control-custom bg-light" value="@_modelPwdChange.UserName" disabled />
             </div>
+
             <div class="col-12">
                 <label class="form-label-bold">@Text["새 비밀번호|New Password"] *</label>
                 <InputText type="password" class="form-control-custom" @bind-Value="_modelPwdChange.Password" />
                 <CustomValidationMessage For="@(() => _modelPwdChange.Password)" />
             </div>
+
             <div class="col-12">
                 <label class="form-label-bold">@Text["비밀번호 확인|Confirm Password"] *</label>
                 <InputText type="password" class="form-control-custom" @bind-Value="_modelPwdChange.PasswordConfirm" />
@@ -178,97 +335,304 @@
     </EditForm>
 </ModalComponent>
 
+<style>
+    .account-management-page .account-page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+
+    .account-summary-row {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .account-summary-card {
+        background: #fff;
+        border: 1px solid #e4ebf3;
+        border-radius: 14px;
+        padding: 14px 16px;
+        box-shadow: 0 8px 22px rgba(20, 52, 91, .04);
+    }
+
+        .account-summary-card .summary-label {
+            color: #6c7785;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .account-summary-card .summary-value {
+            color: #12345a;
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+    .account-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    .account-tab {
+        border: 1px solid #d8e2ed;
+        background: #eef3f8;
+        color: #42566f;
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+        .account-tab.active {
+            background: #12345a;
+            color: #fff;
+            border-color: #12345a;
+            box-shadow: 0 8px 18px rgba(18, 52, 90, .18);
+        }
+
+    @@media (max-width: 992px) {
+        .account-summary-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .account-management-page .account-page-header {
+            flex-direction: column;
+        }
+    }
+</style>
+
 @code {
-    #region variables
-    [Inject] NavigationManager _navManager { get; set; }
-    private IEnumerable<ModelEmployeeAccount> _dataSource = new List<ModelEmployeeAccount>();
-    private ModelUserAccount _modelEdit = new();
-    private ModelPasswordChange _modelPwdChange = new();
-    private List<OptionItem<Guid>> _optRoles = new();
-    private ModalComponent _modalEdit = default!;
-    private ModalComponent _modalPwd = default!;
-    private bool _checkPermissionAdmin;
-    private string _modalEditTitle = string.Empty;
-    #endregion
+	private const string AccountFilterAll = "All";
+	private const string AccountFilterNotCreated = "NotCreated";
+	private const string AccountFilterLocked = "Locked";
 
-    #region events
-    protected override async Task OnInitializedAsync()
-    {
-        _checkPermissionAdmin = await _svc.CheckPermissionAdmin();
+	private IEnumerable<ModelAccountListItem> _dataSource = new List<ModelAccountListItem>();
+	private string _accountFilter = AccountFilterAll;
 
-        if (_checkPermissionAdmin) 
+	private ModelUserAccount _modelEdit = new();
+	private ModelPasswordChange _modelPwdChange = new();
+
+	private List<OptionItem<Guid>> _optRoles = new();
+
+	private ModalComponent _modalEdit = default!;
+	private ModalComponent _modalPwd = default!;
+
+	private bool _checkPermissionAdmin;
+	private bool _isLoading;
+	private string _modalEditTitle = string.Empty;
+
+	private IEnumerable<ModelAccountListItem> FilteredAccounts
+	{
+		get
+		{
+			if (_accountFilter == AccountFilterAll)
+			{
+				return _dataSource;
+			}
+
+			if (_accountFilter == AccountFilterNotCreated)
+			{
+				return _dataSource.Where(x => !x.HasUser);
+			}
+
+			if (_accountFilter == AccountFilterLocked)
+			{
+				return _dataSource.Where(x => x.HasUser && x.Active == false);
+			}
+
+			return _dataSource.Where(x => x.AccountType == _accountFilter);
+		}
+	}
+
+	protected override async Task OnInitializedAsync()
+	{
+		_checkPermissionAdmin = await _svc.CheckPermissionAdmin();
+
+		if (_checkPermissionAdmin)
+		{
+			await ResetData();
+		}
+	}
+
+	private async Task ResetData()
+	{
+		try
+		{
+			_isLoading = true;
+
+			var rsp = await AppStatic.CallApi(() => _svc.GetListAccounts());
+
+			if (!rsp.Success)
+			{
+				_ = swal.Error(rsp.Message);
+				return;
+			}
+
+			_dataSource = rsp.Items ?? new List<ModelAccountListItem>();
+
+			var rsp2 = await AppStatic.CallApi(() => _svc.GetListRoles());
+
+			if (!rsp2.Success)
+			{
+				_ = swal.Error(rsp2.Message);
+				return;
+			}
+
+			_optRoles = rsp2.Items?.ToList() ?? new List<OptionItem<Guid>>();
+		}
+		finally
+		{
+			_isLoading = false;
+			StateHasChanged();
+		}
+	}
+
+	private void SetFilter(string filter)
+	{
+		_accountFilter = filter;
+	}
+
+	private string GetTabClass(string filter)
+	{
+		return _accountFilter == filter
+			? "account-tab active"
+			: "account-tab";
+	}
+
+	private string GetAvatarText(ModelAccountListItem model)
+	{
+		if (model == null || string.IsNullOrWhiteSpace(model.DisplayName))
+		{
+			return "?";
+		}
+
+		return model.DisplayName.Trim()[0].ToString().ToUpper();
+	}
+
+	private void ViewDetail(ModelAccountListItem model)
+	{
+		if (model == null)
+		{
+			return;
+		}
+
+		if (model.AccountType == BasicCodes.AccountType.Customer && model.CustomerGuid.HasValue)
+		{
+			NavigationManager.NavigateTo($"/admin/customers/detail/{model.CustomerGuid.Value}");
+			return;
+		}
+
+		if (model.AccountType == BasicCodes.AccountType.Employee && model.GuidEmployee.HasValue)
+		{
+			NavigationManager.NavigateTo($"/employee/profile/{model.GuidEmployee.Value}");
+			return;
+		}
+
+		if (!string.IsNullOrWhiteSpace(model.UserName) && model.UserName != "-")
+		{
+			NavigationManager.NavigateTo($"/management/account");
+		}
+	}
+
+    private async Task  OpenCreateModal(ModelAccountListItem model)
+	{
+		if (model == null)
+		{
+			return;
+		}
+
+		if (model.AccountType != BasicCodes.AccountType.Employee)
+		{
+			_ = swal.Error(Text["임직원 계정만 여기에서 생성할 수 있습니다.|Only employee accounts can be created here."]);
+			return;
+		}
+
+		if (!model.GuidEmployee.HasValue)
+		{
+			_ = swal.Error(Text["직원 정보가 올바르지 않습니다.|Employee information is invalid."]);
+			return;
+		}
+
+		_modelEdit = new ModelUserAccount
         {
-            await ResetData();
-        }
-    }
-    #endregion
+            GuidEmployee = model.GuidEmployee.Value,
+            FirstName = model.FirstName,
+            LastName = model.LastName,
+            Email = model.Email,
+            Phone = model.Phone,
+            UserName = string.Empty,
+            Password = string.Empty
+        };
 
-    #region methods
-    private async Task ResetData()
-    {
-        var rsp = await AppStatic.CallApi(() => _svc.GetListEmployeeAccount());
-        if (!rsp.Success)
+		_modalEditTitle = Text["계정 생성|Create Account"];
+       await  _modalEdit.Show();
+	}
+
+	private async Task OpenChangePasswordModal(ModelAccountListItem model)
+	{
+		if (model == null || !model.HasUser)
+		{
+			return;
+		}
+
+		_modelPwdChange = new ModelPasswordChange
         {
-            _ = swal.Error(rsp.Message);
-            return;
-        }
+            UserName = model.UserName,
+            Password = string.Empty,
+            PasswordConfirm = string.Empty
+        };
 
-        _dataSource = rsp.Items;
-
-        var rsp2 = await AppStatic.CallApi(() => _svc.GetListRoles());
-        if (!rsp2.Success)
-        {
-            _ = swal.Error(rsp2.Message);
-            return;
-        }
-
-        _optRoles = rsp2.Items.ToList();
-        StateHasChanged();
-    }
+		await  _modalPwd.Show();
+	}
 
     private async Task OnFormEditSubmit()
     {
-        string BaseUri = NavigationManager.BaseUri.ToString();
+        var rsp = await AppStatic.CallApi(
+            () => _svc.CreateUser(_modelEdit, NavigationManager.BaseUri)
+        );
 
-        var rsp = await AppStatic.CallApi(() => _svc.CreateUser(_modelEdit, BaseUri));
         if (!rsp.Success)
         {
             _ = swal.Error(rsp.Message);
             return;
         }
 
-        await _modalEdit.Close();
+        _modalEdit.Show();
+
+        await swal.Alert(
+            Text["계정이 생성되었습니다.|Account has been created."],
+            Text["완료|Success"]
+        );
+
         await ResetData();
-        _ = swal.Alert(Text["Saved!", "Tài khoản đã được tạo!"]);
     }
 
     private async Task OnFormPwdChangeSubmit()
     {
-        var rsp = await AppStatic.CallApi(() => _svc.ChangePassword(_modelPwdChange));
+        var rsp = await AppStatic.CallApi(
+            () => _svc.ChangePassword(_modelPwdChange)
+        );
+
         if (!rsp.Success)
         {
             _ = swal.Error(rsp.Message);
             return;
         }
 
-        await _modalPwd.Close();
+        _modalPwd.Show();
+
+        await swal.Alert(
+            Text["비밀번호가 변경되었습니다.|Password has been changed."],
+            Text["완료|Success"]
+        );
+
         await ResetData();
     }
-
-    private void OpenCreateModal(ModelEmployeeAccount item)
-    {
-        item.TransferTo(_modelEdit);
-        _modelEdit.Phone = item.Phone;
-        _modelEdit.Password = RandomPassword.GeneratePassword();
-        _modalEditTitle = Text["계정 생성|Create Account"];
-        _modalEdit.Show();
-    }
-
-    private void OpenChangePasswordModal(ModelEmployeeAccount item)
-    {
-        _modelPwdChange = new();
-        _modelPwdChange.UserName = item.UserName;
-        _modalPwd.Show();
-    }
-    #endregion
 }

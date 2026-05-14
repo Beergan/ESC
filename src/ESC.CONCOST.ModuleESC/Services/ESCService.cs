@@ -539,4 +539,195 @@ public class ESCService : MyServiceBase, IESCService
             }
         }
     }
+
+    //edit
+    private static ContractWizardDto ToWizardDto(Contract contract)
+    {
+        return new ContractWizardDto
+        {
+            ProjectName = contract.ProjectName ?? string.Empty,
+            Contractor = contract.Contractor ?? string.Empty,
+            Client = contract.Client ?? string.Empty,
+            WorkType = contract.WorkType ?? string.Empty,
+            ContractMethod = contract.ContractMethod ?? string.Empty,
+
+            BidRate = contract.BidRate,
+            PreparedBy = contract.PreparedBy ?? string.Empty,
+
+            ContractAmount = contract.ContractAmount,
+            AdvanceAmt = contract.AdvanceAmt,
+            ExcludedAmt = contract.ExcludedAmt,
+
+            ContractDate = contract.ContractDate,
+            BidDate = contract.BidDate,
+            StartDate = contract.StartDate,
+            CompletionDate = contract.CompletionDate,
+            CompareDate = contract.CompareDate,
+
+            // DB lưu 0.03, UI cần hiện 3.0
+            ThresholdRate = contract.ThresholdRate <= 1
+                ? contract.ThresholdRate * 100m
+                : contract.ThresholdRate,
+
+            ThresholdDays = contract.ThresholdDays,
+            PreviousMonth = contract.PreviousMonth ?? string.Empty
+        };
+    }
+    public async Task<ResultOf<ContractWizardDto>> GetContractAsync(Guid guid)
+    {
+        using (var db = _ctx.ConnectDb())
+        {
+            try
+            {
+                var currentUser = _ctx.GetCurrentUser();
+                var customerId = currentUser?.CustomerId;
+
+                if (!customerId.HasValue)
+                {
+                    return ResultOf<ContractWizardDto>.Error(
+                        _ctx.Text["고객 정보가 없는 계정은 ESC 프로젝트를 조회할 수 없습니다.|An account without customer information cannot view ESC projects."]
+                    );
+                }
+
+                var contract = await db.Repo<Contract>()
+                    .Query()
+                    .FirstOrDefaultAsync(x => x.Guid == guid && x.CustomerId == customerId);
+
+                if (contract == null)
+                {
+                    return ResultOf<ContractWizardDto>.Error(
+                        _ctx.Text["프로젝트를 찾을 수 없습니다.|Project was not found."]
+                    );
+                }
+
+                return ResultOf<ContractWizardDto>.Ok(ToWizardDto(contract));
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error getting contract. Guid={Guid}", guid);
+
+                return ResultOf<ContractWizardDto>.Error(
+                    _ctx.Text["프로젝트를 불러오는 중 오류가 발생했습니다.|An error occurred while loading the project."]
+                );
+            }
+        }
+    }
+    public async Task<ResultOf<Contract>> UpdateContractAsync(Guid guid, ContractWizardDto model)
+    {
+        using (var db = _ctx.ConnectDb())
+        {
+            try
+            {
+                var validation = ContractWizardValidator.Validate(model);
+                if (!validation.IsValid)
+                {
+                    return ResultOf<Contract>.Error(_ctx.Text[validation.Message]);
+                }
+
+                var currentUser = _ctx.GetCurrentUser();
+                var customerId = currentUser?.CustomerId;
+
+                if (!customerId.HasValue)
+                {
+                    return ResultOf<Contract>.Error(
+                        _ctx.Text["고객 정보가 없는 계정은 ESC 프로젝트를 수정할 수 없습니다.|An account without customer information cannot update ESC projects."]
+                    );
+                }
+
+                Normalize(model);
+
+                var contract = await db.Repo<Contract>()
+                    .GetOneEdit(x => x.Guid == guid && x.CustomerId == customerId);
+
+                if (contract == null)
+                {
+                    return ResultOf<Contract>.Error(
+                        _ctx.Text["수정할 프로젝트를 찾을 수 없습니다.|The project to update was not found."]
+                    );
+                }
+
+                var normalizedProjectName = model.ProjectName.ToUpper();
+
+                var isDuplicate = await db.Repo<Contract>().Query()
+                    .AnyAsync(x =>
+                        x.CustomerId == customerId &&
+                        x.Guid != guid &&
+                        x.ProjectName != null &&
+                        x.ProjectName.ToUpper() == normalizedProjectName);
+
+                if (isDuplicate)
+                {
+                    return ResultOf<Contract>.Error(
+                        _ctx.Text[$"'{model.ProjectName}' 프로젝트가 존재합니다.|Project '{model.ProjectName}' already exists."]
+                    );
+                }
+
+                var workTypeExists = await db.Repo<ConstructionCategory>().Query()
+                    .AnyAsync(x => x.IsActive && x.Name == model.WorkType);
+
+                if (!workTypeExists)
+                {
+                    return ResultOf<Contract>.Error(
+                        _ctx.Text["선택한 공사 종류가 유효하지 않습니다.|Selected work type is invalid."]
+                    );
+                }
+
+                var contractMethodExists = await db.Repo<ContractCategory>().Query()
+                    .AnyAsync(x => x.IsActive && x.Name == model.ContractMethod);
+
+                if (!contractMethodExists)
+                {
+                    return ResultOf<Contract>.Error(
+                        _ctx.Text["선택한 계약방법이 유효하지 않습니다.|Selected contract method is invalid."]
+                    );
+                }
+
+                contract.ProjectName = model.ProjectName;
+                contract.Contractor = model.Contractor;
+                contract.Client = model.Client;
+                contract.WorkType = model.WorkType;
+                contract.ContractMethod = model.ContractMethod;
+                contract.BidRate = model.BidRate;
+                contract.PreparedBy = model.PreparedBy;
+
+                contract.ContractAmount = model.ContractAmount;
+                contract.AdvanceAmt = model.AdvanceAmt;
+                contract.ExcludedAmt = model.ExcludedAmt;
+
+                contract.ContractDate = model.ContractDate ?? DateTime.Now;
+                contract.BidDate = model.BidDate ?? DateTime.Now;
+                contract.StartDate = model.StartDate ?? DateTime.Now;
+                contract.CompletionDate = model.CompletionDate ?? DateTime.Now;
+                contract.CompareDate = model.CompareDate ?? DateTime.Now;
+
+                // UI nhập 3.0%, DB lưu 0.03
+                contract.ThresholdRate = model.ThresholdRate / 100m;
+                contract.ThresholdDays = model.ThresholdDays;
+                contract.PreviousMonth = model.PreviousMonth;
+
+                contract.UserModified = currentUser.UserName ?? "System";
+                contract.DateModified = DateTime.UtcNow;
+
+                await db.Repo<Contract>().Update(contract);
+
+                _log.LogInformation(
+                    "Contract updated successfully. ContractId={ContractId}, Guid={Guid}, CustomerId={CustomerId}, ProjectName={ProjectName}",
+                    contract.Id,
+                    contract.Guid,
+                    contract.CustomerId,
+                    contract.ProjectName
+                );
+
+                return ResultOf<Contract>.Ok(contract);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error updating contract. Guid={Guid}", guid);
+
+                return ResultOf<Contract>.Error(
+                    _ctx.Text["수정 중 오류가 발생했습니다.|An error occurred while updating."]
+                );
+            }
+        }
+    }
 }

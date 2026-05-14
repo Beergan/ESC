@@ -1,8 +1,9 @@
-﻿using System;
+﻿using ESC.CONCOST.Abstract;
+using ESC.CONCOST.ModuleManagementCore.Models;
+using RestEase;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using RestEase;
-using ESC.CONCOST.Abstract;
 
 namespace ESC.CONCOST.ModuleManagementCore;
 
@@ -26,4 +27,6 @@ public interface IManagementAccountService : IServiceBase
 
     [Post(nameof(CheckPermissionAdmin))]
     Task<bool> CheckPermissionAdmin();
+    [Get(nameof(GetListAccounts))]
+    Task<ResultsOf<ModelAccountListItem>> GetListAccounts();
 }

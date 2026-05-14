@@ -30,6 +30,7 @@ body {
 .erp-container {
     padding: 32px;
     min-height: calc(100vh - 70px);
+    background: white ;
 }
 
 .erp-page-title {
