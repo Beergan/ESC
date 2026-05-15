@@ -2,12 +2,75 @@
 
 @inject ITextTranslator Text
 @inject IEscFormulaSettingService FormulaService
+@inject IJSRuntime JS
+
 
 @using ESC.CONCOST.Abstract
 @using ESC.CONCOST.ModuleSettingCore
 @using Microsoft.AspNetCore.Components.Forms
 
 <div class="esc-formula-page">
+    <style>
+        /* --- Driver.js Custom Theme --- */
+        .driver-popover.driverjs-theme {
+            background-color: #ffffff;
+            color: #1e3a5f;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 15px 50px rgba(30, 58, 95, 0.2);
+            border: 1px solid rgba(30, 58, 95, 0.08);
+            max-width: 350px;
+        }
+
+        .driver-popover.driverjs-theme .driver-popover-title {
+            font-size: 18px !important;
+            font-weight: 800 !important;
+            color: #1e3a5f !important;
+            margin-bottom: 8px !important;
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+        }
+
+        .driver-popover.driverjs-theme .driver-popover-description {
+            font-size: 14px !important;
+            color: #475569 !important;
+            line-height: 1.6 !important;
+            margin-bottom: 15px !important;
+        }
+
+        .driver-popover.driverjs-theme .driver-popover-navigation-btns {
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        .driver-popover.driverjs-theme .driver-popover-navigation-btns button {
+            background-color: #1e3a5f !important;
+            color: #ffffff !important;
+            border: none !important;
+            border-radius: 8px !important;
+            padding: 8px 16px !important;
+            font-size: 12px !important;
+            font-weight: 700 !important;
+            text-shadow: none !important;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(30, 58, 95, 0.15);
+        }
+
+        .driver-popover.driverjs-theme .driver-popover-navigation-btns button:hover {
+            background-color: #0d2137 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 15px rgba(30, 58, 95, 0.25);
+        }
+
+        .driver-popover.driverjs-theme .driver-popover-arrow {
+            border-color: #ffffff !important;
+        }
+        
+        .driver-popover.driverjs-theme .driver-popover-progress-text {
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 600;
+        }
+    </style>
     <div class="esc-formula-hero">
         <div class="esc-formula-hero-left">
             <div class="esc-formula-kicker">
@@ -36,6 +99,7 @@
         <div class="esc-hero-actions">
             <button type="button"
                     class="btn esc-btn-primary"
+                    data-guide="create-button"
                     @onclick="CreateFormula">
                 <i class="fa-solid fa-plus"></i>
                 @Text["새 계산식|New Formula"]
@@ -71,6 +135,13 @@
                 <i class="fa-solid fa-rotate"></i>
                 @Text["새로고침|Refresh"]
             </button>
+
+            <button type="button" 
+                    class="btn btn-outline-info" 
+                    @onclick="ShowGuide">
+                <i class="fa-solid fa-circle-question"></i>
+                @Text["도움말|Guide"]
+            </button>
         </div>
     </div>
 
@@ -83,7 +154,7 @@
     }
 
     <div class="esc-layout">
-        <aside class="esc-library">
+        <aside class="esc-library" data-guide="formula-list">
             <div class="esc-library-header">
                 <div>
                     <h3>@Text["계산식 목록|Formula Library"]</h3>
@@ -166,7 +237,7 @@
                 <EditForm Model="_editModel" OnValidSubmit="SaveFormulaAsync">
                     <DataAnnotationsValidator />
 
-                    <div class="formula-status @GetStatusClass()">
+                    <div class="formula-status @GetStatusClass()" data-guide="formula-status">
                         <div>
                             <strong>@GetStatusTitle()</strong>
                             <p>@GetStatusDescription()</p>
@@ -176,6 +247,7 @@
                     <div class="esc-tabs">
                         <button type="button"
                                 class="@GetTabClass("basic")"
+                                data-guide="tab-basic"
                                 @onclick='() => SetTab("basic")'>
                             <i class="fa-solid fa-circle-info"></i>
                             @Text["기본 정보|Basic"]
@@ -183,6 +255,7 @@
 
                         <button type="button"
                                 class="@GetTabClass("option")"
+                                data-guide="tab-option"
                                 @onclick='() => SetTab("option")'>
                             <i class="fa-solid fa-sliders"></i>
                             @Text["조건/옵션|Options"]
@@ -190,6 +263,7 @@
 
                         <button type="button"
                                 class="@GetTabClass("formula")"
+                                data-guide="tab-formula"
                                 @onclick='() => SetTab("formula")'>
                             <i class="fa-solid fa-square-root-variable"></i>
                             @Text["계산식|Formula"]
@@ -197,6 +271,7 @@
 
                         <button type="button"
                                 class="@GetTabClass("test")"
+                                data-guide="tab-test"
                                 @onclick='() => SetTab("test")'>
                             <i class="fa-solid fa-vial"></i>
                             @Text["테스트|Test"]
@@ -212,7 +287,7 @@
                             </div>
 
                             <div class="row g-3">
-                                <div class="col-md-4">
+                                <div class="col-md-4" data-guide="formula-code">
                                     <label class="esc-label">@Text["계산식 코드|Formula Code"] <b>*</b></label>
                                     <InputText class="form-control esc-input"
                                                placeholder="ESC_2026_V1"
@@ -220,7 +295,7 @@
                                     <small>@Text["예: ESC_2026_V1|Example: ESC_2026_V1"]</small>
                                 </div>
 
-                                <div class="col-md-4">
+                                <div class="col-md-4" data-guide="formula-name">
                                     <label class="esc-label">@Text["이름(한국어)|Name Korean"] <b>*</b></label>
                                     <InputText class="form-control esc-input"
                                                placeholder="@Text["기본 ESC 계산식|Default ESC Formula"]"
@@ -247,7 +322,7 @@
                                 <div class="col-md-6">
                                     <label class="esc-label">@Text["상태|Status"]</label>
 
-                                    <div class="esc-check-grid">
+                                    <div class="esc-check-grid" data-guide="formula-status-options">
                                         <label class="esc-check">
                                             <InputCheckbox @bind-Value="_editModel.IsActive" />
                                             <span>
@@ -293,7 +368,7 @@
                                 <p>@Text["조정 가능 여부 판단 기준과 반올림 방식을 설정합니다.|Set eligibility thresholds and rounding method."]</p>
                             </div>
 
-                            <div class="row g-3">
+                            <div class="row g-3" data-guide="condition-area">
                                 <div class="col-md-3">
                                     <label class="esc-label">@Text["등락율 기준 (%)|Threshold Rate (%)"]</label>
                                     <InputNumber class="form-control esc-input" @bind-Value="_editModel.ThresholdRate" />
@@ -349,7 +424,7 @@
                                 <p>@Text["입력칸을 클릭한 뒤 변수나 연산자를 누르면 자동으로 추가됩니다.|Click an input field, then click variables or operators to insert them."]</p>
                             </div>
 
-                            <div class="formula-help">
+                            <div class="formula-help" data-guide="formula-help">
                                 <strong>@Text["관리자 안내|Admin Guide"]</strong>
                                 <p>
                                     @Text["잘 모르면 기본값을 유지하세요. 수정 후 반드시 테스트 계산을 실행하세요.|If unsure, keep defaults. After editing, always run test calculation."]
@@ -410,6 +485,7 @@
                                         Text["각 비목 금액이 전체 금액에서 차지하는 비율입니다.|Ratio of item amount to total amount."],
                                         _editModel.WeightFormula,
                                         nameof(_editModel.WeightFormula),
+                                        "weight-formula",
                                         value => _editModel.WeightFormula = value)
 
                                     @RenderFormulaInput(
@@ -418,14 +494,16 @@
                                         Text["비교월 지수를 기준월 지수로 나눈 값입니다.|Compare index divided by base index."],
                                         _editModel.IndexRatioFormula,
                                         nameof(_editModel.IndexRatioFormula),
+                                        "",
                                         value => _editModel.IndexRatioFormula = value)
 
                                     @RenderFormulaInput(
                                         Text["3. 가중 지수비율 계산식|3. Weighted Ratio Formula"],
                                         "WeightedRatioFormula",
-                                        Text["가중치와 지수비율을 곱한 값입니다.|Weight multiplied by index ratio."],
+                                        Text["가중치 và 지수비율을 곱한 값입니다.|Weight multiplied by index ratio."],
                                         _editModel.WeightedRatioFormula,
                                         nameof(_editModel.WeightedRatioFormula),
+                                        "",
                                         value => _editModel.WeightedRatioFormula = value)
 
                                     @RenderFormulaInput(
@@ -434,6 +512,7 @@
                                         Text["모든 비목의 가중 지수비율을 합산합니다.|Sum weighted ratios of all items."],
                                         _editModel.CompositeFormula,
                                         nameof(_editModel.CompositeFormula),
+                                        "",
                                         value => _editModel.CompositeFormula = value)
 
                                     @RenderFormulaInput(
@@ -442,6 +521,7 @@
                                         Text["최종 변동률 K를 계산합니다.|Calculates final adjustment rate K."],
                                         _editModel.AdjustmentRateFormula,
                                         nameof(_editModel.AdjustmentRateFormula),
+                                        "adjustment-rate-formula",
                                         value => _editModel.AdjustmentRateFormula = value)
 
                                     @RenderFormulaInput(
@@ -450,6 +530,7 @@
                                         Text["계약금액에서 제외금액을 뺀 값입니다.|Contract amount minus excluded amount."],
                                         _editModel.ApplicableAmountFormula,
                                         nameof(_editModel.ApplicableAmountFormula),
+                                        "",
                                         value => _editModel.ApplicableAmountFormula = value)
 
                                     @RenderFormulaInput(
@@ -458,6 +539,7 @@
                                         Text["선금공제 전 조정금액입니다.|Adjustment amount before advance deduction."],
                                         _editModel.GrossAdjustmentFormula,
                                         nameof(_editModel.GrossAdjustmentFormula),
+                                        "",
                                         value => _editModel.GrossAdjustmentFormula = value)
 
                                     @RenderFormulaInput(
@@ -466,6 +548,7 @@
                                         Text["선금이 있을 경우 조정금액에서 공제할 금액입니다.|Deduction amount when advance exists."],
                                         _editModel.AdvanceDeductionFormula,
                                         nameof(_editModel.AdvanceDeductionFormula),
+                                        "",
                                         value => _editModel.AdvanceDeductionFormula = value)
 
                                     @RenderFormulaInput(
@@ -474,6 +557,7 @@
                                         Text["최종적으로 사용자에게 표시되는 조정금액입니다.|Final adjustment amount shown to user."],
                                         _editModel.FinalAdjustmentFormula,
                                         nameof(_editModel.FinalAdjustmentFormula),
+                                        "",
                                         value => _editModel.FinalAdjustmentFormula = value)
 
                                     @RenderFormulaInput(
@@ -482,6 +566,7 @@
                                         Text["등락율과 경과일수가 기준을 만족하는지 판단합니다.|Checks if rate and elapsed days meet thresholds."],
                                         _editModel.EligibleConditionFormula,
                                         nameof(_editModel.EligibleConditionFormula),
+                                        "",
                                         value => _editModel.EligibleConditionFormula = value)
                                 </div>
                             </div>
@@ -540,6 +625,7 @@
                                 <div class="col-md-12">
                                     <button type="button"
                                             class="btn esc-btn-info"
+                                            data-guide="test-button"
                                             @onclick="TestFormulaAsync">
                                         <i class="fa-solid fa-vial"></i>
                                         @Text["테스트 계산 실행|Run Test Calculation"]
@@ -582,7 +668,8 @@
                         </button>
 
                         <button type="submit"
-                                class="btn esc-btn-success">
+                                class="btn esc-btn-success"
+                                data-guide="save-button">
                             <i class="fa-solid fa-save"></i>
                             @Text["저장|Save"]
                         </button>
@@ -1994,18 +2081,30 @@
         _message = null;
     }
 
+    private async Task ShowGuide()
+    {
+        var lang = Text.CurrentLang ?? "ko";
+        if (_selectedFormula == null)
+            await JS.InvokeVoidAsync("escFormulaGuide.startQuickGuide", lang);
+        else
+            await JS.InvokeVoidAsync("escFormulaGuide.startCreateFormulaGuide", lang);
+    }
+
     private RenderFragment RenderFormulaInput(
         string label,
         string code,
         string help,
         string value,
         string focusName,
+        string dataGuide,
         Action<string> onValueChanged) => builder =>
     {
         var seq = 0;
 
         builder.OpenElement(seq++, "div");
         builder.AddAttribute(seq++, "class", "formula-input-block");
+        if (!string.IsNullOrEmpty(dataGuide))
+            builder.AddAttribute(seq++, "data-guide", dataGuide);
 
         builder.OpenElement(seq++, "div");
         builder.AddAttribute(seq++, "class", "formula-input-head");
