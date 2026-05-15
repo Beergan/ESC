@@ -23,6 +23,8 @@ public class EntityRegister : IEntityRegister
         modelBuilder.Entity<EscFormulaSetting>().HasAlternateKey(x => x.Guid);
         modelBuilder.Entity<EscFormulaVariable>().HasAlternateKey(x => x.Guid);
         modelBuilder.Entity<EscFormulaHistory>().HasAlternateKey(x => x.Guid);
+        modelBuilder.Entity<IndexType>().HasAlternateKey(x => x.Guid);
+        modelBuilder.Entity<IndexTimeSeries>().HasAlternateKey(x => x.Guid);
     }
     public void Seed(IDbContext db)
     {

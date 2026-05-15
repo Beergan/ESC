@@ -1,0 +1,1934 @@
+@page "/management/esc-index-setting"
+
+@using ESC.CONCOST.Abstract
+@using ESC.CONCOST.ModuleSetting
+@using System.Globalization
+
+@inject ITextTranslator Text
+@inject IEscIndexService IndexService
+@inject IJSRuntime JS
+
+<div class="esc-admin-page">
+    <div class="esc-page-header">
+        <div>
+            <div class="esc-page-kicker">
+                <i class="fa-solid fa-sliders"></i>
+                @Text["ESC 관리자 설정|ESC Admin Settings"]
+            </div>
+
+            <h2>@Text["지수 그룹 및 항목 설정|Index Group & Item Settings"]</h2>
+
+            <p>
+                @Text["월별 지수 입력과 ESC 계산식에서 사용할 그룹과 지수 항목을 관리합니다.|Manage groups and index items used for monthly index input and ESC calculation."]
+            </p>
+        </div>
+
+        <div class="esc-page-actions">
+            <button type="button" class="esc-btn esc-btn-light" @onclick="LoadDataAsync" disabled="@_loading">
+                <i class="fa-solid fa-rotate"></i>
+                @Text["새로고침|Refresh"]
+            </button>
+
+            <button type="button" class="esc-btn esc-btn-primary" @onclick="CreateGroup" disabled="@_loading">
+                <i class="fa-solid fa-folder-plus"></i>
+                @Text["새 그룹|New Group"]
+            </button>
+
+            <button type="button" class="esc-btn esc-btn-success" @onclick="CreateIndex" disabled="@(!_selectedGroupId.HasValue || _loading)">
+                <i class="fa-solid fa-plus"></i>
+                @Text["지수 추가|Add Index"]
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="esc-alert @(_isError ? "error" : "success")">
+            <i class="fa-solid @(_isError ? "fa-triangle-exclamation" : "fa-circle-check")"></i>
+            <span>@_message</span>
+            <button type="button" @onclick="ClearMessage">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    }
+
+    <section class="esc-guide-card">
+        <div class="guide-title">
+            <i class="fa-solid fa-circle-info"></i>
+            @Text["관리 흐름 안내|Management Flow"]
+        </div>
+
+        <div class="guide-content">
+            <div>
+                <strong>1. @Text["그룹 생성|Create Group"]</strong>
+                <span>@Text["노무비, 재료비, 경비처럼 월별 입력 화면의 탭이 됩니다.|It becomes a tab on the monthly input page, such as Labor, Material, Expense."]</span>
+            </div>
+
+            <div>
+                <strong>2. @Text["지수 생성|Create Index"]</strong>
+                <span>@Text["각 그룹에 연결되는 실제 입력 항목입니다.|Actual input items linked to each group."]</span>
+            </div>
+
+            <div>
+                <strong>3. @Text["월별 입력에서 사용|Used Monthly"]</strong>
+                <span>@Text["월별 입력 화면은 여기서 만든 그룹과 지수를 자동으로 읽습니다.|Monthly input page automatically reads groups and indexes from here."]</span>
+            </div>
+        </div>
+    </section>
+
+    <div class="esc-setting-layout">
+        <section class="esc-card group-card">
+            <div class="esc-card-header">
+                <div>
+                    <h3>@Text["지수 그룹|Index Groups"]</h3>
+                    <span>@Text["월별 입력 화면의 탭으로 표시됩니다.|Displayed as tabs on the monthly input page."]</span>
+                </div>
+
+                <strong>@FilteredGroups.Count()</strong>
+            </div>
+
+            <div class="esc-search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input value="@_groupSearch"
+                       @oninput="OnGroupSearchChanged"
+                       placeholder="@Text["그룹 코드 또는 이름 검색|Search group code or name"]" />
+            </div>
+
+            <div class="esc-group-list">
+                @if (_loading)
+                {
+                    <div class="esc-empty">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                        <strong>@Text["불러오는 중입니다.|Loading..."]</strong>
+                    </div>
+                }
+                else if (!FilteredGroups.Any())
+                {
+                    <div class="esc-empty">
+                        <i class="fa-regular fa-folder-open"></i>
+                        <strong>@Text["등록된 그룹이 없습니다.|No groups found."]</strong>
+                        <span>@Text["새 그룹 버튼으로 먼저 그룹을 생성하세요.|Create a group first using the New Group button."]</span>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var group in FilteredGroups)
+                    {
+                        <button type="button"
+                                class="esc-group-item @(group.Id == _selectedGroupId ? "active" : "")"
+                                @onclick="() => SelectGroup(group)">
+                            <div class="group-icon">
+                                <i class="@GetIcon(group.IconClass)"></i>
+                            </div>
+
+                            <div class="group-info">
+                                <strong>@GetGroupDisplayName(group)</strong>
+                                <span>
+                                    <code>@group.GroupCode</code>
+                                    · @Text["정렬|Sort"] @group.SortOrder
+                                </span>
+                            </div>
+
+                            <div class="group-side">
+                                @if (group.IsActive)
+                                {
+                                    <span class="esc-badge green">@Text["사용|Active"]</span>
+                                }
+                                else
+                                {
+                                    <span class="esc-badge gray">@Text["중지|Inactive"]</span>
+                                }
+
+                                <button type="button"
+                                        class="group-edit-btn"
+                                        @onclick:stopPropagation="true"
+                                        @onclick="() => EditGroup(group)"
+                                        title="@Text["그룹 수정|Edit Group"]">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                            </div>
+                        </button>
+                    }
+                }
+            </div>
+        </section>
+
+        <section class="esc-card">
+            <div class="esc-card-header">
+                <div>
+                    <h3>@Text["지수 항목|Index Items"]</h3>
+                    <span>
+                        @if (_selectedGroupId.HasValue)
+                        {
+                            @GetSelectedGroupTitle()
+                        }
+                        else
+                        {
+                            @Text["그룹을 선택하세요.|Please select a group."]
+                        }
+                    </span>
+                </div>
+
+                <div class="header-count">
+                    <button type="button"
+                            class="esc-btn esc-btn-success esc-btn-sm"
+                            @onclick="CreateIndex"
+                            disabled="@(!_selectedGroupId.HasValue)">
+                        <i class="fa-solid fa-plus"></i>
+                        @Text["지수 추가|Add Index"]
+                    </button>
+
+                    <strong>@FilteredIndexes.Count()</strong>
+                </div>
+            </div>
+
+            <div class="esc-toolbar">
+                <div class="esc-search wide">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input value="@_indexSearch"
+                           @oninput="OnIndexSearchChanged"
+                           placeholder="@Text["지수명, 코드, 출처/비고 검색|Search name, code, source/note"]" />
+                </div>
+
+                <select class="esc-input status-select" @bind="_statusFilter">
+                    <option value="ALL">@Text["전체 상태|All Status"]</option>
+                    <option value="ACTIVE">@Text["사용|Active"]</option>
+                    <option value="INACTIVE">@Text["중지|Inactive"]</option>
+                </select>
+            </div>
+
+            <div class="esc-table-wrap">
+                <table class="esc-table">
+                    <thead>
+                        <tr>
+                            <th style="width:150px;">@Text["코드|Code"]</th>
+                            <th>@Text["지수명|Index Name"]</th>
+                            <th style="width:160px;">@Text["그룹|Group"]</th>
+                            <th style="width:130px;">@Text["유형|Type"]</th>
+                            <th style="width:100px;">@Text["단위|Unit"]</th>
+                            <th>@Text["출처/비고|Source / Note"]</th>
+                            <th style="width:100px;">@Text["상태|Status"]</th>
+                            <th style="width:130px;">@Text["관리|Manage"]</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @if (_loading)
+                        {
+                            <tr>
+                                <td colspan="8">
+                                    <div class="esc-empty">
+                                        <i class="fa-solid fa-spinner fa-spin"></i>
+                                        <strong>@Text["불러오는 중입니다.|Loading..."]</strong>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        else if (!_selectedGroupId.HasValue)
+                        {
+                            <tr>
+                                <td colspan="8">
+                                    <div class="esc-empty">
+                                        <i class="fa-solid fa-layer-group"></i>
+                                        <strong>@Text["왼쪽에서 그룹을 선택하세요.|Select a group on the left."]</strong>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        else if (!FilteredIndexes.Any())
+                        {
+                            <tr>
+                                <td colspan="8">
+                                    <div class="esc-empty">
+                                        <i class="fa-solid fa-database"></i>
+                                        <strong>@Text["등록된 지수 항목이 없습니다.|No index items found."]</strong>
+                                        <span>@Text["지수 추가 버튼으로 이 그룹에 항목을 생성하세요.|Create an item in this group using the Add Index button."]</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var item in FilteredIndexes)
+                            {
+                                <tr>
+                                    <td>
+                                        <code class="esc-code">@item.IndexCode</code>
+                                    </td>
+
+                                    <td>
+                                        <div class="index-name">
+                                            <strong>@GetIndexDisplayName(item)</strong>
+                                            @if (!string.IsNullOrWhiteSpace(item.IndexNameEn) && Text.IsKorean)
+                                            {
+                                                <small>@item.IndexNameEn</small>
+                                            }
+                                        </div>
+                                    </td>
+
+                                    <td>
+                                        <span class="esc-badge blue">@GetGroupNameByCode(item.GroupCode)</span>
+                                    </td>
+
+                                    <td>
+                                        <span class="esc-badge purple">@GetTypeText(item.Type)</span>
+                                    </td>
+
+                                    <td>
+                                        <span class="unit-text">@item.Unit</span>
+                                    </td>
+
+                                    <td>
+                                        @if (string.IsNullOrWhiteSpace(item.DataSource))
+                                        {
+                                            <span class="empty-note">-</span>
+                                        }
+                                        else
+                                        {
+                                            <div class="source-note">
+                                                <i class="fa-regular fa-note-sticky"></i>
+                                                <span>@item.DataSource</span>
+                                            </div>
+                                        }
+                                    </td>
+
+                                    <td>
+                                        @if (item.IsActive)
+                                        {
+                                            <span class="esc-badge green">@Text["사용|Active"]</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="esc-badge gray">@Text["중지|Inactive"]</span>
+                                        }
+                                    </td>
+
+                                    <td>
+                                        <div class="row-actions">
+                                            <button type="button"
+                                                    class="icon-btn"
+                                                    @onclick="() => EditIndex(item)"
+                                                    title="@Text["수정|Edit"]">
+                                                <i class="fa-solid fa-pen"></i>
+                                            </button>
+
+                                            <button type="button"
+                                                    class="icon-btn"
+                                                    @onclick="() => ToggleIndexAsync(item)"
+                                                    title="@Text["상태 변경|Toggle Status"]">
+                                                <i class="fa-solid fa-power-off"></i>
+                                            </button>
+
+                                            <button type="button"
+                                                    class="icon-btn danger"
+                                                    @onclick="() => DeleteIndexAsync(item)"
+                                                    title="@Text["삭제|Delete"]">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    @if (_showGroupModal)
+    {
+        <div class="esc-modal-backdrop">
+            <div class="esc-modal">
+                <div class="esc-modal-header">
+                    <div>
+                        <h3>@_groupModalTitle</h3>
+                        <p>@Text["그룹은 월별 입력 화면의 탭으로 사용됩니다.|Groups are used as tabs on the monthly input page."]</p>
+                    </div>
+
+                    <button type="button" class="modal-close" @onclick="CloseGroupModal">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <EditForm Model="_groupEdit" OnValidSubmit="SaveGroupAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="modal-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label>@Text["그룹 코드|Group Code"] *</label>
+                                <InputText class="esc-input"
+                                           @bind-Value="_groupEdit.GroupCode"
+                                           disabled="@(_groupEdit.Id > 0)"
+                                           placeholder="LABOR, MATERIAL, EQUIPMENT" />
+                                <ValidationMessage For="@(() => _groupEdit.GroupCode)" />
+                                <small>@Text["저장 후 코드는 변경하지 않는 것이 안전합니다.|It is safer not to change the code after saving."]</small>
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["정렬 순서|Sort Order"]</label>
+                                <InputNumber class="esc-input" @bind-Value="_groupEdit.SortOrder" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["그룹명 한국어|Group Name Korean"] *</label>
+                                <InputText class="esc-input"
+                                           @bind-Value="_groupEdit.GroupName"
+                                           placeholder="예: 노무비" />
+                                <ValidationMessage For="@(() => _groupEdit.GroupName)" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["그룹명 영어|Group Name English"]</label>
+                                <InputText class="esc-input"
+                                           @bind-Value="_groupEdit.GroupNameEn"
+                                           placeholder="Ex: Labor Cost" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["아이콘 CSS|Icon CSS"]</label>
+                                <InputText class="esc-input"
+                                           @bind-Value="_groupEdit.IconClass"
+                                           placeholder="fa-solid fa-layer-group" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["사용 여부|Active"]</label>
+                                <label class="check-line">
+                                    <InputCheckbox @bind-Value="_groupEdit.IsActive" />
+                                    <span>@Text["사용함|Active"]</span>
+                                </label>
+                            </div>
+
+                            <div class="field full">
+                                <label>@Text["설명|Description"]</label>
+                                <InputTextArea class="esc-input textarea"
+                                               @bind-Value="_groupEdit.Description"
+                                               placeholder="@Text["관리자가 이해하기 쉬운 설명을 입력하세요.|Enter a description that admin can easily understand."]" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        @if (_groupEdit.Id > 0)
+                        {
+                            <button type="button"
+                                    class="esc-btn esc-btn-danger"
+                                    @onclick="() => DeleteGroupAsync(_groupEdit)"
+                                    disabled="@_saving">
+                                <i class="fa-solid fa-trash"></i>
+                                @Text["삭제|Delete"]
+                            </button>
+                        }
+
+                        <div class="spacer"></div>
+
+                        <button type="button" class="esc-btn esc-btn-light" @onclick="CloseGroupModal" disabled="@_saving">
+                            @Text["취소|Cancel"]
+                        </button>
+
+                        <button type="submit" class="esc-btn esc-btn-primary" disabled="@_saving">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                            @Text["저장|Save"]
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
+    @if (_showIndexModal)
+    {
+        <div class="esc-modal-backdrop">
+            <div class="esc-modal large">
+                <div class="esc-modal-header">
+                    <div>
+                        <h3>@_indexModalTitle</h3>
+                        <p>@Text["월별 입력 화면에서 입력할 지수 항목입니다.|This is an index item entered on the monthly input page."]</p>
+                    </div>
+
+                    <button type="button" class="modal-close" @onclick="CloseIndexModal">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <EditForm Model="_indexEdit" OnValidSubmit="SaveIndexAsync">
+                    <DataAnnotationsValidator />
+
+                    <div class="modal-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label>@Text["지수 코드|Index Code"] *</label>
+                                <InputText class="esc-input"
+                                           @bind-Value="_indexEdit.IndexCode"
+                                           placeholder="LABOR_001" />
+                                <ValidationMessage For="@(() => _indexEdit.IndexCode)" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["그룹|Group"] *</label>
+                                <select class="esc-input" @bind="_selectedGroupIdForIndex">
+                                    <option value="">@Text["그룹 선택|Select Group"]</option>
+                                    @foreach (var group in _groups.Where(x => x.IsActive).OrderBy(x => x.SortOrder))
+                                    {
+                                        <option value="@group.Id">@GetGroupDisplayName(group)</option>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["지수명 한국어|Index Name Korean"] *</label>
+                                <InputText class="esc-input"
+                                           @bind-Value="_indexEdit.IndexName"
+                                           placeholder="예: 노임단가" />
+                                <ValidationMessage For="@(() => _indexEdit.IndexName)" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["지수명 영어|Index Name English"]</label>
+                                <InputText class="esc-input"
+                                           @bind-Value="_indexEdit.IndexNameEn"
+                                           placeholder="Ex: Labor Wage Index" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["유형|Type"]</label>
+                                <select class="esc-input" @bind="_indexEdit.Type">
+                                    <option value="@IndexValueTypeValue">@Text["값형|Value"]</option>
+                                    <option value="@IndexValueTypeRate">@Text["요율형|Rate"]</option>
+                                    <option value="@IndexValueTypeUnitPrice">@Text["단가형|Unit Price"]</option>
+                                </select>
+                                <small>@Text["계산 방식 구분용입니다.|Used to classify calculation input type."]</small>
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["단위|Unit"]</label>
+                                <InputText class="esc-input"
+                                           @bind-Value="_indexEdit.Unit"
+                                           placeholder="%, 원, 원/kg, point" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["갱신 주기|Update Frequency"]</label>
+                                <select class="esc-input" @bind="_indexEdit.UpdateFreq">
+                                    <option value="MONTHLY">@Text["월별|Monthly"]</option>
+                                    <option value="QUARTERLY">@Text["분기별|Quarterly"]</option>
+                                    <option value="YEARLY">@Text["연도별|Yearly"]</option>
+                                </select>
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["정렬 순서|Sort Order"]</label>
+                                <InputNumber class="esc-input" @bind-Value="_indexEdit.SortOrder" />
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["PPI 유형|PPI Type"]</label>
+                                <label class="check-line">
+                                    <InputCheckbox @bind-Value="_indexEdit.IsPpiType" />
+                                    <span>@Text["생산자물가지수 유형|Producer Price Index Type"]</span>
+                                </label>
+                            </div>
+
+                            <div class="field">
+                                <label>@Text["사용 여부|Active"]</label>
+                                <label class="check-line">
+                                    <InputCheckbox @bind-Value="_indexEdit.IsActive" />
+                                    <span>@Text["사용함|Active"]</span>
+                                </label>
+                            </div>
+
+                            <div class="field full">
+                                <label>@Text["출처/비고|Source / Note"]</label>
+                                <InputTextArea class="esc-input textarea"
+                                               @bind-Value="_indexEdit.DataSource"
+                                               placeholder="@Text["예: 한국은행 생산자물가지수, 조달청 가격정보, 관리자 직접 입력|Ex: Bank of Korea PPI, PPS price information, manual input by admin"]" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        @if (_indexEdit.Id > 0)
+                        {
+                            <button type="button"
+                                    class="esc-btn esc-btn-danger"
+                                    @onclick="() => DeleteIndexAsync(_indexEdit)"
+                                    disabled="@_saving">
+                                <i class="fa-solid fa-trash"></i>
+                                @Text["삭제|Delete"]
+                            </button>
+                        }
+
+                        <div class="spacer"></div>
+
+                        <button type="button" class="esc-btn esc-btn-light" @onclick="CloseIndexModal" disabled="@_saving">
+                            @Text["취소|Cancel"]
+                        </button>
+
+                        <button type="submit" class="esc-btn esc-btn-primary" disabled="@_saving">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                            @Text["저장|Save"]
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .esc-admin-page {
+        padding: 28px 38px;
+        background: #f3f7fb;
+        min-height: calc(100vh - 64px);
+        color: #102a43;
+    }
+
+    .esc-page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        margin-bottom: 18px;
+    }
+
+    .esc-page-kicker {
+        color: #0f4c81;
+        font-size: 13px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .esc-page-header h2 {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 900;
+        color: #12345a;
+    }
+
+    .esc-page-header p {
+        margin: 6px 0 0;
+        font-size: 13px;
+        color: #64748b;
+    }
+
+    .esc-page-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .esc-guide-card {
+        background: #eef6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 18px;
+        padding: 16px 18px;
+        margin-bottom: 16px;
+    }
+
+    .guide-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #0f4c81;
+        font-size: 14px;
+        font-weight: 900;
+        margin-bottom: 12px;
+    }
+
+    .guide-content {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+        .guide-content div {
+            background: #fff;
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+            padding: 12px;
+        }
+
+        .guide-content strong {
+            display: block;
+            color: #12345a;
+            font-size: 13px;
+            font-weight: 900;
+            margin-bottom: 5px;
+        }
+
+        .guide-content span {
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+    .esc-setting-layout {
+        display: grid;
+        grid-template-columns: 380px minmax(0, 1fr);
+        gap: 18px;
+    }
+
+    .esc-card {
+        background: #fff;
+        border: 1px solid #dbe6f3;
+        border-radius: 20px;
+        box-shadow: 0 14px 34px rgba(15, 46, 82, .06);
+        overflow: hidden;
+    }
+
+    .esc-card-header {
+        padding: 18px 20px;
+        border-bottom: 1px solid #e5edf6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+    }
+
+        .esc-card-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 900;
+            color: #12345a;
+        }
+
+        .esc-card-header span {
+            color: #7b8da3;
+            font-size: 12px;
+        }
+
+    .header-count {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+        .header-count strong,
+        .esc-card-header > strong {
+            min-width: 34px;
+            height: 34px;
+            border-radius: 12px;
+            background: #eef6ff;
+            color: #0f4c81;
+            display: grid;
+            place-items: center;
+            font-size: 14px;
+            font-weight: 900;
+        }
+
+    .esc-search {
+        height: 42px;
+        border: 1px solid #dbe6f3;
+        border-radius: 12px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        margin: 14px 16px;
+    }
+
+        .esc-search.wide {
+            flex: 1;
+            margin: 0;
+        }
+
+        .esc-search input {
+            border: 0;
+            outline: 0;
+            background: transparent;
+            width: 100%;
+            font-size: 13px;
+            color: #102a43;
+        }
+
+    .esc-group-list {
+        padding: 0 16px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 680px;
+        overflow: auto;
+    }
+
+    .esc-group-item {
+        width: 100%;
+        border: 1px solid #e3edf7;
+        background: #fff;
+        border-radius: 16px;
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        cursor: pointer;
+        text-align: left;
+        transition: .18s;
+    }
+
+        .esc-group-item:hover {
+            border-color: #b8cce0;
+            background: #f8fbff;
+        }
+
+        .esc-group-item.active {
+            border-color: #12345a;
+            background: #eef6ff;
+            box-shadow: 0 8px 20px rgba(18, 52, 90, .1);
+        }
+
+    .group-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        background: #eaf4ff;
+        color: #12345a;
+        flex: 0 0 auto;
+    }
+
+    .group-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+        .group-info strong {
+            display: block;
+            font-weight: 900;
+            color: #102a43;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .group-info span {
+            display: block;
+            margin-top: 4px;
+            color: #7b8da3;
+            font-size: 12px;
+        }
+
+    .group-side {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+    }
+
+    .group-edit-btn {
+        width: 32px;
+        height: 32px;
+        border: 1px solid #dbe6f3;
+        background: #fff;
+        color: #12345a;
+        border-radius: 10px;
+        cursor: pointer;
+    }
+
+    .esc-toolbar {
+        padding: 14px 16px;
+        display: flex;
+        gap: 10px;
+        border-bottom: 1px solid #e5edf6;
+        background: #fbfdff;
+    }
+
+    .esc-input {
+        border: 1px solid #cfdae8;
+        border-radius: 12px;
+        height: 42px;
+        padding: 0 12px;
+        outline: 0;
+        background: #fff;
+        color: #102a43;
+        font-size: 13px;
+        width: 100%;
+    }
+
+        .esc-input:focus {
+            border-color: #12345a;
+            box-shadow: 0 0 0 3px rgba(18, 52, 90, .08);
+        }
+
+    .textarea {
+        height: 94px;
+        padding-top: 10px;
+        resize: vertical;
+    }
+
+    .status-select {
+        width: 180px;
+    }
+
+    .esc-table-wrap {
+        overflow: auto;
+    }
+
+    .esc-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1120px;
+    }
+
+        .esc-table th {
+            background: #f1f6fb;
+            color: #49627c;
+            font-size: 12px;
+            font-weight: 900;
+            padding: 12px 14px;
+            border-bottom: 1px solid #dbe6f3;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .esc-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid #edf2f8;
+            font-size: 13px;
+            vertical-align: middle;
+        }
+
+        .esc-table tbody tr:hover {
+            background: #fbfdff;
+        }
+
+    .index-name strong {
+        display: block;
+        color: #102a43;
+        font-weight: 900;
+    }
+
+    .index-name small {
+        display: block;
+        margin-top: 3px;
+        color: #7b8da3;
+        font-size: 11px;
+    }
+
+    .esc-code {
+        background: #eff6ff;
+        color: #0f4c81;
+        padding: 4px 7px;
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .esc-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+        .esc-badge.green {
+            background: #eafaf0;
+            color: #16803c;
+        }
+
+        .esc-badge.gray {
+            background: #eef2f6;
+            color: #64748b;
+        }
+
+        .esc-badge.blue {
+            background: #eaf4ff;
+            color: #0f4c81;
+        }
+
+        .esc-badge.purple {
+            background: #f2edff;
+            color: #6d43c2;
+        }
+
+    .unit-text {
+        color: #475569;
+        font-weight: 800;
+    }
+
+    .source-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 7px;
+        color: #64748b;
+        font-size: 12px;
+        line-height: 1.45;
+        max-width: 320px;
+    }
+
+        .source-note i {
+            color: #94a3b8;
+            margin-top: 2px;
+        }
+
+    .empty-note {
+        color: #cbd5e1;
+    }
+
+    .row-actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    .icon-btn {
+        width: 34px;
+        height: 34px;
+        border: 1px solid #dbe6f3;
+        background: #fff;
+        color: #12345a;
+        border-radius: 10px;
+        cursor: pointer;
+    }
+
+        .icon-btn:hover {
+            background: #eef6ff;
+        }
+
+        .icon-btn.danger {
+            color: #dc2626;
+        }
+
+    .esc-btn {
+        border: 0;
+        border-radius: 12px;
+        padding: 10px 15px;
+        font-weight: 900;
+        font-size: 13px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        white-space: nowrap;
+        transition: .16s ease;
+    }
+
+    .esc-btn-sm {
+        padding: 7px 11px;
+        font-size: 12px;
+    }
+
+    .esc-btn:disabled {
+        opacity: .55;
+        cursor: not-allowed;
+    }
+
+    .esc-btn-primary {
+        background: #12345a;
+        color: #fff;
+        box-shadow: 0 10px 22px rgba(18, 52, 90, .16);
+    }
+
+    .esc-btn-light {
+        background: #fff;
+        color: #12345a;
+        border: 1px solid #cfdbe8;
+    }
+
+    .esc-btn-success {
+        background: #16a34a;
+        color: #fff;
+        box-shadow: 0 10px 22px rgba(22, 163, 74, .16);
+    }
+
+    .esc-btn-danger {
+        background: #dc2626;
+        color: #fff;
+    }
+
+    .esc-alert {
+        margin-bottom: 14px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        font-size: 13px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+        .esc-alert button {
+            margin-left: auto;
+            border: 0;
+            background: transparent;
+            cursor: pointer;
+            color: inherit;
+        }
+
+        .esc-alert.success {
+            background: #ecfdf3;
+            color: #16803c;
+            border: 1px solid #bbf7d0;
+        }
+
+        .esc-alert.error {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+
+    .esc-empty {
+        padding: 46px 18px;
+        text-align: center;
+        color: #8da0b6;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+    }
+
+        .esc-empty i {
+            font-size: 28px;
+        }
+
+        .esc-empty strong {
+            color: #60758b;
+        }
+
+        .esc-empty span {
+            color: #94a3b8;
+            font-size: 13px;
+        }
+
+    .esc-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 3000;
+        background: rgba(15, 23, 42, .48);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+
+    .esc-modal {
+        width: min(760px, 100%);
+        max-height: calc(100vh - 48px);
+        overflow: auto;
+        background: #fff;
+        border-radius: 22px;
+        box-shadow: 0 30px 80px rgba(0,0,0,.25);
+    }
+
+        .esc-modal.large {
+            width: min(980px, 100%);
+        }
+
+    .esc-modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid #e5edf6;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+        .esc-modal-header h3 {
+            margin: 0;
+            color: #12345a;
+            font-weight: 900;
+        }
+
+        .esc-modal-header p {
+            margin: 5px 0 0;
+            color: #64748b;
+            font-size: 13px;
+        }
+
+    .modal-close {
+        width: 36px;
+        height: 36px;
+        border: 0;
+        background: #f1f5f9;
+        border-radius: 12px;
+        color: #475569;
+        cursor: pointer;
+    }
+
+    .modal-body {
+        padding: 22px 24px;
+    }
+
+    .modal-footer {
+        padding: 16px 24px 22px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-top: 1px solid #e5edf6;
+    }
+
+    .spacer {
+        flex: 1;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .field {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+    }
+
+        .field.full {
+            grid-column: 1 / -1;
+        }
+
+        .field label {
+            font-size: 12px;
+            color: #334155;
+            font-weight: 900;
+        }
+
+        .field small {
+            color: #94a3b8;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+    .check-line {
+        height: 42px;
+        border: 1px solid #cfdae8;
+        border-radius: 12px;
+        padding: 0 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #f8fbff;
+        font-size: 13px;
+        font-weight: 800;
+        color: #475569;
+    }
+
+    @@media (max-width: 1200px) {
+        .esc-setting-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .guide-content {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .esc-admin-page {
+            padding: 18px;
+        }
+
+        .esc-page-header,
+        .esc-toolbar,
+        .esc-card-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .status-select {
+            width: 100%;
+        }
+
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .modal-footer {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .spacer {
+            display: none;
+        }
+    }
+</style>
+
+@code {
+    private const string IndexValueTypeValue = "VALUE";
+    private const string IndexValueTypeRate = "RATE";
+    private const string IndexValueTypeUnitPrice = "UNIT_PRICE";
+
+    private bool _loading;
+    private bool _saving;
+
+    private string _message = string.Empty;
+    private bool _isError;
+
+    private List<EscIndexGroup> _groups = new();
+    private List<IndexType> _indexes = new();
+
+    private EscIndexGroup _groupEdit = new();
+    private IndexType _indexEdit = new();
+
+    private int? _selectedGroupId;
+    private int? _selectedGroupIdForIndex;
+
+    private string _groupSearch = string.Empty;
+    private string _indexSearch = string.Empty;
+    private string _statusFilter = "ALL";
+
+    private bool _showGroupModal;
+    private bool _showIndexModal;
+
+    private string _groupModalTitle = string.Empty;
+    private string _indexModalTitle = string.Empty;
+
+    private IEnumerable<EscIndexGroup> FilteredGroups
+    {
+        get
+        {
+            var query = _groups.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(_groupSearch))
+            {
+                query = query.Where(x =>
+                    Contains(x.GroupCode, _groupSearch) ||
+                    Contains(x.GroupName, _groupSearch) ||
+                    Contains(x.GroupNameEn, _groupSearch) ||
+                    Contains(x.Description, _groupSearch));
+            }
+
+            return query
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.GroupName);
+        }
+    }
+
+    private IEnumerable<IndexType> FilteredIndexes
+    {
+        get
+        {
+            var query = _indexes.AsEnumerable();
+
+            if (_selectedGroupId.HasValue)
+            {
+                var selectedGroup = _groups.FirstOrDefault(x => x.Id == _selectedGroupId.Value);
+
+                if (selectedGroup != null)
+                {
+                    query = query.Where(x => x.GroupCode == selectedGroup.GroupCode);
+                }
+            }
+            else
+            {
+                query = Enumerable.Empty<IndexType>();
+            }
+
+            if (!string.IsNullOrWhiteSpace(_indexSearch))
+            {
+                query = query.Where(x =>
+                    Contains(x.IndexCode, _indexSearch) ||
+                    Contains(x.IndexName, _indexSearch) ||
+                    Contains(x.IndexNameEn, _indexSearch) ||
+                    Contains(x.DataSource, _indexSearch));
+            }
+
+            if (_statusFilter == "ACTIVE")
+            {
+                query = query.Where(x => x.IsActive);
+            }
+            else if (_statusFilter == "INACTIVE")
+            {
+                query = query.Where(x => !x.IsActive);
+            }
+
+            return query
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.IndexName);
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            _loading = true;
+            ClearMessage();
+
+            var groupTask = IndexService.GetIndexGroupsAsync(includeInactive: true);
+            var indexTask = IndexService.GetIndexTypesAsync(includeInactive: true);
+
+            await Task.WhenAll(groupTask, indexTask);
+
+            _groups = groupTask.Result ?? new List<EscIndexGroup>();
+            _indexes = indexTask.Result ?? new List<IndexType>();
+
+            if (_selectedGroupId.HasValue && !_groups.Any(x => x.Id == _selectedGroupId.Value))
+            {
+                _selectedGroupId = null;
+            }
+
+            if (!_selectedGroupId.HasValue && _groups.Any())
+            {
+                _selectedGroupId = _groups
+                    .OrderBy(x => x.SortOrder)
+                    .ThenBy(x => x.GroupName)
+                    .First()
+                    .Id;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["데이터를 불러오지 못했습니다.|Failed to load data."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void SelectGroup(EscIndexGroup group)
+    {
+        _selectedGroupId = group.Id;
+        _indexSearch = string.Empty;
+    }
+
+    private void CreateGroup()
+    {
+        _groupEdit = new EscIndexGroup
+        {
+            Guid = Guid.NewGuid(),
+            GroupCode = GenerateGroupCode(),
+            GroupName = string.Empty,
+            GroupNameEn = string.Empty,
+            Description = string.Empty,
+            IconClass = "fa-solid fa-layer-group",
+            SortOrder = GetNextGroupSortOrder(),
+            IsActive = true
+        };
+
+        _groupModalTitle = Text["새 그룹 등록|Create New Group"];
+        _showGroupModal = true;
+    }
+
+    private void EditGroup(EscIndexGroup group)
+    {
+        _groupEdit = CloneGroup(group);
+        _groupModalTitle = Text["그룹 수정|Edit Group"];
+        _showGroupModal = true;
+    }
+
+    private void CloseGroupModal()
+    {
+        _showGroupModal = false;
+        _groupEdit = new EscIndexGroup();
+    }
+
+    private async Task SaveGroupAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_groupEdit.GroupCode))
+        {
+            ShowMessage(Text["그룹 코드를 입력하세요.|Please enter group code."], true);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_groupEdit.GroupName))
+        {
+            ShowMessage(Text["그룹명을 입력하세요.|Please enter group name."], true);
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+
+            _groupEdit.GroupCode = NormalizeCode(_groupEdit.GroupCode);
+            _groupEdit.GroupName = _groupEdit.GroupName?.Trim() ?? string.Empty;
+            _groupEdit.GroupNameEn = _groupEdit.GroupNameEn?.Trim() ?? string.Empty;
+            _groupEdit.Description = _groupEdit.Description?.Trim() ?? string.Empty;
+            _groupEdit.IconClass = string.IsNullOrWhiteSpace(_groupEdit.IconClass)
+                ? "fa-solid fa-layer-group"
+                : _groupEdit.IconClass.Trim();
+
+            var result = await IndexService.SaveIndexGroupAsync(_groupEdit);
+
+            if (!result.Success)
+            {
+                ShowMessage(result.Message, true);
+                return;
+            }
+
+            var savedCode = _groupEdit.GroupCode;
+
+            CloseGroupModal();
+
+            await LoadDataAsync();
+
+            var savedGroup = _groups.FirstOrDefault(x => x.GroupCode == savedCode);
+            if (savedGroup != null)
+            {
+                _selectedGroupId = savedGroup.Id;
+            }
+
+            ShowMessage(Text["그룹이 저장되었습니다.|Group saved successfully."], false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["그룹 저장 중 오류가 발생했습니다.|Error while saving group."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteGroupAsync(EscIndexGroup group)
+    {
+        if (group.Id <= 0 || _saving)
+        {
+            return;
+        }
+
+        var confirm = await ConfirmAsync(Text["이 그룹을 삭제하시겠습니까? 연결된 지수가 있으면 비활성 처리됩니다.|Delete this group? If it has linked indexes, it will be deactivated."]);
+
+        if (!confirm)
+        {
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+
+            var result = await IndexService.DeleteGroupAsync(group.Id);
+
+            if (!result.Success)
+            {
+                ShowMessage(result.Message, true);
+                return;
+            }
+
+            CloseGroupModal();
+            _selectedGroupId = null;
+
+            await LoadDataAsync();
+
+            ShowMessage(Text["그룹이 삭제 또는 비활성 처리되었습니다.|Group deleted or deactivated successfully."], false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["그룹 삭제 중 오류가 발생했습니다.|Error while deleting group."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void CreateIndex()
+    {
+        var selectedGroup = _selectedGroupId.HasValue
+            ? _groups.FirstOrDefault(x => x.Id == _selectedGroupId.Value)
+            : _groups.Where(x => x.IsActive).OrderBy(x => x.SortOrder).FirstOrDefault();
+
+        if (selectedGroup == null)
+        {
+            ShowMessage(Text["먼저 그룹을 생성하거나 선택하세요.|Please create or select a group first."], true);
+            return;
+        }
+
+        _selectedGroupIdForIndex = selectedGroup.Id;
+
+        _indexEdit = new IndexType
+        {
+            Guid = Guid.NewGuid(),
+            IndexGroupId = selectedGroup.Id,
+            GroupCode = selectedGroup.GroupCode,
+            IndexCode = GenerateIndexCode(selectedGroup),
+            IndexName = string.Empty,
+            IndexNameEn = string.Empty,
+            Type = IndexValueTypeValue,
+            Unit = string.Empty,
+            DataSource = string.Empty,
+            UpdateFreq = "MONTHLY",
+            IsPpiType = false,
+            SortOrder = GetNextIndexSortOrder(selectedGroup.GroupCode),
+            IsActive = true
+        };
+
+        _indexModalTitle = Text["새 지수 등록|Create New Index"];
+        _showIndexModal = true;
+    }
+
+    private void EditIndex(IndexType item)
+    {
+        _indexEdit = CloneIndex(item);
+
+        var group = _groups.FirstOrDefault(x => x.Id == item.IndexGroupId)
+            ?? _groups.FirstOrDefault(x => x.GroupCode == item.GroupCode);
+
+        _selectedGroupIdForIndex = group?.Id;
+
+        _indexModalTitle = Text["지수 수정|Edit Index"];
+        _showIndexModal = true;
+    }
+
+    private void CloseIndexModal()
+    {
+        _showIndexModal = false;
+        _indexEdit = new IndexType();
+        _selectedGroupIdForIndex = null;
+    }
+
+    private async Task SaveIndexAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_indexEdit.IndexCode))
+        {
+            ShowMessage(Text["지수 코드를 입력하세요.|Please enter index code."], true);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_indexEdit.IndexName))
+        {
+            ShowMessage(Text["지수명을 입력하세요.|Please enter index name."], true);
+            return;
+        }
+
+        var group = _groups.FirstOrDefault(x => x.Id == _selectedGroupIdForIndex);
+
+        if (group == null)
+        {
+            ShowMessage(Text["그룹을 선택하세요.|Please select a group."], true);
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+
+            _indexEdit.IndexCode = NormalizeCode(_indexEdit.IndexCode);
+            _indexEdit.IndexName = _indexEdit.IndexName?.Trim() ?? string.Empty;
+            _indexEdit.IndexNameEn = _indexEdit.IndexNameEn?.Trim() ?? string.Empty;
+            _indexEdit.Type = string.IsNullOrWhiteSpace(_indexEdit.Type)
+                ? IndexValueTypeValue
+                : _indexEdit.Type.Trim();
+
+            _indexEdit.Unit = _indexEdit.Unit?.Trim() ?? string.Empty;
+            _indexEdit.DataSource = _indexEdit.DataSource?.Trim() ?? string.Empty;
+            _indexEdit.UpdateFreq = string.IsNullOrWhiteSpace(_indexEdit.UpdateFreq)
+                ? "MONTHLY"
+                : _indexEdit.UpdateFreq.Trim();
+
+            _indexEdit.IndexGroupId = group.Id;
+            _indexEdit.GroupCode = group.GroupCode;
+
+            var result = await IndexService.SaveIndexTypeAsync(_indexEdit);
+
+            if (!result.Success)
+            {
+                ShowMessage(result.Message, true);
+                return;
+            }
+
+            _selectedGroupId = group.Id;
+
+            CloseIndexModal();
+
+            await LoadDataAsync();
+
+            ShowMessage(Text["지수가 저장되었습니다.|Index saved successfully."], false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["지수 저장 중 오류가 발생했습니다.|Error while saving index."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ToggleIndexAsync(IndexType item)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+
+            var result = await IndexService.ToggleActiveAsync(item.Id);
+
+            if (!result.Success)
+            {
+                ShowMessage(result.Message, true);
+                return;
+            }
+
+            await LoadDataAsync();
+
+            ShowMessage(Text["상태가 변경되었습니다.|Status changed successfully."], false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["상태 변경 중 오류가 발생했습니다.|Error while changing status."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteIndexAsync(IndexType item)
+    {
+        if (item.Id <= 0 || _saving)
+        {
+            return;
+        }
+
+        var confirm = await ConfirmAsync(Text["이 지수를 삭제하시겠습니까? 월별 데이터가 있으면 비활성 처리됩니다.|Delete this index? If it has monthly data, it will be deactivated."]);
+
+        if (!confirm)
+        {
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+
+            var result = await IndexService.DeleteIndexTypeAsync(item.Id);
+
+            if (!result.Success)
+            {
+                ShowMessage(result.Message, true);
+                return;
+            }
+
+            CloseIndexModal();
+
+            await LoadDataAsync();
+
+            ShowMessage(Text["지수가 삭제 또는 비활성 처리되었습니다.|Index deleted or deactivated successfully."], false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["지수 삭제 중 오류가 발생했습니다.|Error while deleting index."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void OnGroupSearchChanged(ChangeEventArgs e)
+    {
+        _groupSearch = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private void OnIndexSearchChanged(ChangeEventArgs e)
+    {
+        _indexSearch = e.Value?.ToString() ?? string.Empty;
+    }
+
+    private string GetSelectedGroupTitle()
+    {
+        var group = _groups.FirstOrDefault(x => x.Id == _selectedGroupId);
+
+        if (group == null)
+        {
+            return Text["그룹을 선택하세요.|Please select a group."];
+        }
+
+        return $"{GetGroupDisplayName(group)} · {group.GroupCode}";
+    }
+
+    private string GetGroupDisplayName(EscIndexGroup group)
+    {
+        if (Text.IsKorean)
+        {
+            return string.IsNullOrWhiteSpace(group.GroupName) ? group.GroupCode : group.GroupName;
+        }
+
+        return string.IsNullOrWhiteSpace(group.GroupNameEn) ? group.GroupName : group.GroupNameEn;
+    }
+
+    private string GetIndexDisplayName(IndexType item)
+    {
+        if (Text.IsKorean)
+        {
+            return string.IsNullOrWhiteSpace(item.IndexName) ? item.IndexCode : item.IndexName;
+        }
+
+        return string.IsNullOrWhiteSpace(item.IndexNameEn) ? item.IndexName : item.IndexNameEn;
+    }
+
+    private string GetGroupNameByCode(string groupCode)
+    {
+        var group = _groups.FirstOrDefault(x => x.GroupCode == groupCode);
+
+        return group == null ? groupCode : GetGroupDisplayName(group);
+    }
+
+    private string GetTypeText(string type)
+    {
+        if (string.Equals(type, IndexValueTypeValue, StringComparison.OrdinalIgnoreCase))
+        {
+            return Text["값형|Value"];
+        }
+
+        if (string.Equals(type, IndexValueTypeRate, StringComparison.OrdinalIgnoreCase))
+        {
+            return Text["요율형|Rate"];
+        }
+
+        if (string.Equals(type, IndexValueTypeUnitPrice, StringComparison.OrdinalIgnoreCase))
+        {
+            return Text["단가형|Unit Price"];
+        }
+
+        return type;
+    }
+
+    private static bool Contains(string source, string keyword)
+    {
+        return !string.IsNullOrWhiteSpace(source)
+            && source.Contains(keyword ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeCode(string value)
+    {
+        return (value ?? string.Empty)
+            .Trim()
+            .Replace(" ", "_")
+            .Replace("-", "_")
+            .ToUpperInvariant();
+    }
+
+    private string GenerateGroupCode()
+    {
+        var next = _groups.Count + 1;
+
+        string code;
+
+        do
+        {
+            code = $"GROUP_{next:D2}";
+            next++;
+        }
+        while (_groups.Any(x => string.Equals(x.GroupCode, code, StringComparison.OrdinalIgnoreCase)));
+
+        return code;
+    }
+
+    private string GenerateIndexCode(EscIndexGroup group)
+    {
+        var prefix = string.IsNullOrWhiteSpace(group.GroupCode)
+            ? "IDX"
+            : group.GroupCode;
+
+        var next = _indexes.Count(x => x.GroupCode == group.GroupCode) + 1;
+
+        string code;
+
+        do
+        {
+            code = $"{prefix}_{next:D3}";
+            next++;
+        }
+        while (_indexes.Any(x => string.Equals(x.IndexCode, code, StringComparison.OrdinalIgnoreCase)));
+
+        return code;
+    }
+
+    private int GetNextGroupSortOrder()
+    {
+        return _groups.Any() ? _groups.Max(x => x.SortOrder) + 10 : 10;
+    }
+
+    private int GetNextIndexSortOrder(string groupCode)
+    {
+        var list = _indexes.Where(x => x.GroupCode == groupCode).ToList();
+
+        return list.Any() ? list.Max(x => x.SortOrder) + 10 : 10;
+    }
+
+    private static string GetIcon(string icon)
+    {
+        return string.IsNullOrWhiteSpace(icon) ? "fa-solid fa-layer-group" : icon;
+    }
+
+    private static EscIndexGroup CloneGroup(EscIndexGroup x)
+    {
+        return new EscIndexGroup
+        {
+            Id = x.Id,
+            Guid = x.Guid,
+            GroupCode = x.GroupCode,
+            GroupName = x.GroupName,
+            GroupNameEn = x.GroupNameEn,
+            Description = x.Description,
+            IconClass = x.IconClass,
+            SortOrder = x.SortOrder,
+            IsActive = x.IsActive,
+            DateCreated = x.DateCreated,
+            DateModified = x.DateModified
+        };
+    }
+
+    private static IndexType CloneIndex(IndexType x)
+    {
+        return new IndexType
+        {
+            Id = x.Id,
+            Guid = x.Guid,
+            IndexGroupId = x.IndexGroupId,
+            IndexCode = x.IndexCode,
+            IndexName = x.IndexName,
+            IndexNameEn = x.IndexNameEn,
+            GroupCode = x.GroupCode,
+            Type = x.Type,
+            DataSource = x.DataSource,
+            Unit = x.Unit,
+            UpdateFreq = x.UpdateFreq,
+            IsPpiType = x.IsPpiType,
+            SortOrder = x.SortOrder,
+            IsActive = x.IsActive,
+            DateCreated = x.DateCreated,
+            DateModified = x.DateModified
+        };
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    private void ClearMessage()
+    {
+        _message = string.Empty;
+        _isError = false;
+    }
+
+    private async Task<bool> ConfirmAsync(string message)
+    {
+        return await JS.InvokeAsync<bool>("confirm", message);
+    }
+}

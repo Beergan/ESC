@@ -1,0 +1,675 @@
+@page "/management/esc-index-monthly"
+
+@using ESC.CONCOST.Abstract
+@using ESC.CONCOST.ModuleSetting
+
+@inject ITextTranslator Text
+@inject IEscIndexService IndexService
+
+<div class="erp-container">
+    <div class="esc-page-header">
+        <div>
+            <div class="esc-page-kicker">
+                <i class="fa-solid fa-calendar-days"></i>
+                @Text["관리자 설정|Admin Settings"]
+            </div>
+
+            <h2>@Text["월별 지수 데이터 입력|Monthly Index Data Input"]</h2>
+
+            <p>
+                @Text["관리자가 등록한 그룹과 지수 항목을 기준으로 월별 지수 값을 입력합니다.|Enter monthly index values based on admin-configured groups and index items."]
+            </p>
+        </div>
+
+        <div class="esc-page-actions">
+            <button class="esc-btn esc-btn-light" @onclick="LoadBaseDataAsync" disabled="@_loading">
+                <i class="fa-solid fa-rotate"></i>
+                @Text["새로고침|Refresh"]
+            </button>
+
+            <button class="esc-btn esc-btn-primary" @onclick="SaveAllAsync" disabled="@(!_hasChanges || _saving)">
+                <i class="fa-solid fa-floppy-disk"></i>
+                @Text["저장|Save"]
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="esc-alert @(_isError ? "error" : "success")">
+            @_message
+        </div>
+    }
+
+    <section class="esc-month-control">
+        <div class="period-controls">
+            <div class="field inline">
+                <label>@Text["연도|Year"]</label>
+                <input type="number" class="esc-input" @bind="_selectedYear" />
+            </div>
+
+            <div class="field inline">
+                <label>@Text["월|Month"]</label>
+                <select class="esc-input" @bind="_selectedMonth">
+                    @for (var month = 1; month <= 12; month++)
+                    {
+                        <option value="@month">@month.ToString("D2")</option>
+                    }
+                </select>
+            </div>
+
+            <button class="esc-btn esc-btn-primary" @onclick="SearchPeriodAsync" disabled="@_loading">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                @Text["조회|Search"]
+            </button>
+
+            <button class="esc-btn esc-btn-light" @onclick="CopyPreviousMonthAsync" disabled="@(!_dataLoaded || _saving)">
+                <i class="fa-solid fa-copy"></i>
+                @Text["이전 월 복사|Copy Previous"]
+            </button>
+
+            <button class="esc-btn esc-btn-danger-light" @onclick="DeleteMonthAsync" disabled="@(!_dataLoaded || _saving)">
+                <i class="fa-solid fa-trash"></i>
+                @Text["월 데이터 삭제|Delete Month"]
+            </button>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <strong>@_totalCount</strong>
+                <span>@Text["전체|Total"]</span>
+            </div>
+
+            <div class="stat blue">
+                <strong>@_enteredCount</strong>
+                <span>@Text["입력|Entered"]</span>
+            </div>
+
+            <div class="stat green">
+                <strong>@_verifiedCount</strong>
+                <span>@Text["검증|Verified"]</span>
+            </div>
+
+            <div class="stat orange">
+                <strong>@_missingCount</strong>
+                <span>@Text["미입력|Missing"]</span>
+            </div>
+
+            <div class="stat dark">
+                <strong>@_changedSet.Count</strong>
+                <span>@Text["변경|Changed"]</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="esc-card">
+        <div class="esc-card-header">
+            <div>
+                <h3>@Text["지수 데이터 입력|Index Data Entry"]</h3>
+                <span>@DisplayPeriod</span>
+            </div>
+
+            <div class="esc-page-actions">
+                <button class="esc-btn esc-btn-light small" @onclick="VerifyAll" disabled="@(!_dataLoaded)">
+                    <i class="fa-solid fa-check-double"></i>
+                    @Text["전체 검증|Verify All"]
+                </button>
+
+                <button class="esc-btn esc-btn-light small" @onclick="UnverifyAll" disabled="@(!_dataLoaded)">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    @Text["검증 해제|Unverify"]
+                </button>
+            </div>
+        </div>
+
+        <div class="group-tabs">
+            <button class="group-tab @(IsAllGroupSelected ? "active" : "")"
+                    @onclick="() => SelectGroup(AllGroupCode)">
+                <i class="fa-solid fa-border-all"></i>
+                @Text["전체|All"]
+            </button>
+
+            @foreach (var group in ActiveGroups)
+            {
+                <button class="group-tab @(_selectedGroupCode == group.GroupCode ? "active" : "")"
+                        @onclick="() => SelectGroup(group.GroupCode)">
+                    <i class="@GetIcon(group.IconClass)"></i>
+                    @GetGroupDisplayName(group)
+                </button>
+            }
+        </div>
+
+        <div class="esc-table-wrap">
+            <table class="esc-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>@Text["그룹|Group"]</th>
+                        <th>@Text["코드|Code"]</th>
+                        <th>@Text["지수명|Name"]</th>
+                        <th>@Text["유형|Type"]</th>
+                        <th>@Text["단위|Unit"]</th>
+                        <th>@Text["지수값|Value"]</th>
+                        <th>@Text["검증|Verify"]</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @if (_loading)
+                    {
+                        <tr>
+                            <td colspan="8">
+                                <div class="esc-empty">
+                                    <i class="fa-solid fa-spinner fa-spin"></i>
+                                    <span>@Text["불러오는 중입니다.|Loading..."]</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else if (!_dataLoaded)
+                    {
+                        <tr>
+                            <td colspan="8">
+                                <div class="esc-empty">
+                                    <i class="fa-solid fa-calendar-days"></i>
+                                    <span>@Text["연도와 월을 선택한 후 조회하세요.|Select year/month and search."]</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else if (!FilteredRows.Any())
+                    {
+                        <tr>
+                            <td colspan="8">
+                                <div class="esc-empty">
+                                    <i class="fa-solid fa-database"></i>
+                                    <span>@Text["표시할 지수 항목이 없습니다.|No index items to display."]</span>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        var index = 0;
+
+                        @foreach (var row in FilteredRows)
+                        {
+                            index++;
+
+                            <tr class="@GetRowClass(row)">
+                                <td>@index</td>
+
+                                <td>
+                                    <span class="badge blue">@GetGroupName(row.GroupCode)</span>
+                                </td>
+
+                                <td><code>@row.IndexCode</code></td>
+
+                                <td>
+                                    <strong>@GetRowDisplayName(row)</strong>
+                                </td>
+
+                                <td>
+                                    <span class="badge purple">@row.Type</span>
+                                </td>
+
+                                <td>@row.Unit</td>
+
+                                <td>
+                                    <input type="number"
+                                           step="0.01"
+                                           class="value-input @(row.IndexValue == 0 ? "missing" : "")"
+                                           value="@row.IndexValue"
+                                           @onchange="e => OnValueChanged(row, e)" />
+                                </td>
+
+                                <td>
+                                    <label class="check-line small-check">
+                                        <input type="checkbox"
+                                               checked="@row.DataVerified"
+                                               @onchange="e => OnVerifyChanged(row, e)" />
+                                        <span>@Text["확인|OK"]</span>
+                                    </label>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    @if (_hasChanges)
+    {
+        <div class="floating-save">
+            <div>
+                <i class="fa-solid fa-pen"></i>
+                @Text["저장되지 않은 변경사항이 있습니다.|There are unsaved changes."]
+                <strong>@_changedSet.Count</strong>
+            </div>
+
+            <button class="esc-btn esc-btn-primary" @onclick="SaveAllAsync" disabled="@_saving">
+                <i class="fa-solid fa-floppy-disk"></i>
+                @Text["변경사항 저장|Save Changes"]
+            </button>
+        </div>
+    }
+</div>
+
+<style>
+    .esc-admin-page { padding: 28px 38px; background: #f3f7fb; min-height: calc(100vh - 64px); color: #102a43; }
+    .esc-page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 18px; }
+    .esc-page-kicker { color: #0f4c81; font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .esc-page-header h2 { margin: 0; font-size: 28px; font-weight: 900; color: #12345a; }
+    .esc-page-header p { margin: 6px 0 0; font-size: 13px; color: #64748b; }
+    .esc-page-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .esc-month-control, .esc-card { background: #fff; border: 1px solid #dbe6f3; border-radius: 18px; box-shadow: 0 14px 34px rgba(15, 46, 82, .06); margin-bottom: 18px; overflow: hidden; }
+    .esc-month-control { padding: 18px; display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
+    .period-controls { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field.inline { min-width: 110px; }
+    .field label { font-size: 12px; color: #334155; font-weight: 900; }
+    .esc-input { border: 1px solid #cfdae8; border-radius: 12px; height: 42px; padding: 0 12px; outline: 0; background: #fff; color: #102a43; font-size: 13px; }
+    .esc-btn { border: 0; border-radius: 12px; padding: 10px 15px; font-weight: 900; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+    .esc-btn.small { padding: 7px 11px; font-size: 12px; }
+    .esc-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .esc-btn-primary { background: #12345a; color: #fff; }
+    .esc-btn-light { background: #fff; color: #12345a; border: 1px solid #cfdbe8; }
+    .esc-btn-danger-light { background: #fff5f5; color: #dc2626; border: 1px solid #fecaca; }
+    .stats { display: flex; gap: 10px; flex-wrap: wrap; }
+    .stat { min-width: 82px; padding: 10px 12px; border-radius: 14px; background: #f1f6fb; border: 1px solid #e3edf7; text-align: center; }
+    .stat strong { display: block; font-size: 20px; font-weight: 900; color: #12345a; }
+    .stat span { display: block; font-size: 11px; color: #64748b; font-weight: 800; }
+    .stat.blue strong { color: #2563eb; }
+    .stat.green strong { color: #16a34a; }
+    .stat.orange strong { color: #f59e0b; }
+    .stat.dark strong { color: #0f172a; }
+    .esc-card-header { padding: 18px 20px; border-bottom: 1px solid #e5edf6; display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+    .esc-card-header h3 { margin: 0; font-size: 16px; font-weight: 900; color: #12345a; }
+    .esc-card-header span { color: #7b8da3; font-size: 12px; }
+    .group-tabs { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 16px; border-bottom: 1px solid #e5edf6; background: #fbfdff; }
+    .group-tab { border: 1px solid #d8e4f0; background: #edf3f9; color: #42566f; border-radius: 999px; padding: 8px 13px; font-size: 12px; font-weight: 900; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .group-tab.active, .group-tab:hover { background: #12345a; border-color: #12345a; color: #fff; }
+    .esc-table-wrap { overflow: auto; }
+    .esc-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+    .esc-table th { background: #f1f6fb; color: #49627c; font-size: 12px; font-weight: 900; padding: 12px 14px; border-bottom: 1px solid #dbe6f3; text-align: left; white-space: nowrap; }
+    .esc-table td { padding: 12px 14px; border-bottom: 1px solid #edf2f8; font-size: 13px; vertical-align: middle; }
+    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 9px; font-size: 11px; font-weight: 900; white-space: nowrap; }
+    .badge.blue { background: #eaf4ff; color: #0f4c81; }
+    .badge.purple { background: #f2edff; color: #6d43c2; }
+    .value-input { width: 140px; height: 38px; border: 1px solid #cfdae8; border-radius: 11px; padding: 0 10px; text-align: right; font-size: 13px; font-weight: 800; color: #102a43; outline: 0; font-family: Consolas, monospace; }
+    .value-input.missing { background: #fffbeb; border-color: #fbbf24; }
+    .check-line { height: 42px; border: 1px solid #cfdae8; border-radius: 12px; padding: 0 12px; display: flex; align-items: center; gap: 8px; background: #f8fbff; }
+    .small-check { height: 34px; display: inline-flex; }
+    .row-missing { background: #fffdf5; }
+    .row-verified td:first-child { border-left: 4px solid #16a34a; }
+    .esc-empty { padding: 48px 18px; text-align: center; color: #8da0b6; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+    .esc-alert { margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; font-size: 13px; font-weight: 800; }
+    .esc-alert.success { background: #ecfdf3; color: #16803c; border: 1px solid #bbf7d0; }
+    .esc-alert.error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .floating-save { position: fixed; left: 24px; right: 24px; bottom: 18px; z-index: 1200; background: #12345a; color: #fff; border-radius: 18px; padding: 14px 18px; box-shadow: 0 18px 42px rgba(15, 23, 42, .24); display: flex; justify-content: space-between; align-items: center; gap: 14px; font-weight: 900; font-size: 13px; }
+    @@media (max-width: 900px) { .esc-admin-page { padding: 18px; } .esc-page-header, .esc-month-control, .esc-card-header, .floating-save { flex-direction: column; align-items: stretch; } }
+</style>
+
+@code {
+    private const string AllGroupCode = "__ALL__";
+
+    private class MonthlyRow
+    {
+        public int IndexTypeId { get; set; }
+        public string IndexCode { get; set; } = string.Empty;
+        public string IndexName { get; set; } = string.Empty;
+        public string IndexNameEn { get; set; } = string.Empty;
+        public string GroupCode { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string Unit { get; set; } = string.Empty;
+        public int SortOrder { get; set; }
+        public decimal IndexValue { get; set; }
+        public bool DataVerified { get; set; }
+    }
+
+    private bool _loading;
+    private bool _saving;
+    private bool _dataLoaded;
+
+    private int _selectedYear = DateTime.Now.Year;
+    private int _selectedMonth = DateTime.Now.Month;
+
+    private string _selectedGroupCode = AllGroupCode;
+    private string _message = string.Empty;
+    private bool _isError;
+
+    private List<EscIndexGroup> _groups = new();
+    private List<IndexType> _indexTypes = new();
+    private List<MonthlyRow> _rows = new();
+
+    private readonly HashSet<int> _changedSet = new();
+
+    private bool _hasChanges => _changedSet.Count > 0;
+
+    private bool IsAllGroupSelected => _selectedGroupCode == AllGroupCode;
+
+    private string CurrentPeriodKey => $"{_selectedYear}{_selectedMonth:D2}";
+
+    private string DisplayPeriod => $"{_selectedYear}.{_selectedMonth:D2}";
+
+    private IEnumerable<EscIndexGroup> ActiveGroups =>
+        _groups.Where(x => x.IsActive).OrderBy(x => x.SortOrder).ThenBy(x => x.GroupName);
+
+    private IEnumerable<MonthlyRow> FilteredRows
+    {
+        get
+        {
+            var query = _rows.AsEnumerable();
+
+            if (!IsAllGroupSelected)
+            {
+                query = query.Where(x => x.GroupCode == _selectedGroupCode);
+            }
+
+            return query
+                .OrderBy(x => GetGroupSortOrder(x.GroupCode))
+                .ThenBy(x => x.SortOrder)
+                .ThenBy(x => x.IndexName);
+        }
+    }
+
+    private int _totalCount => _rows.Count;
+    private int _enteredCount => _rows.Count(x => x.IndexValue != 0);
+    private int _verifiedCount => _rows.Count(x => x.DataVerified);
+    private int _missingCount => _rows.Count(x => x.IndexValue == 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBaseDataAsync();
+    }
+
+    private async Task LoadBaseDataAsync()
+    {
+        try
+        {
+            _loading = true;
+            _message = string.Empty;
+
+            var groupTask = IndexService.GetIndexGroupsAsync(includeInactive: false);
+            var indexTask = IndexService.GetIndexTypesAsync(includeInactive: false);
+
+            await Task.WhenAll(groupTask, indexTask);
+
+            _groups = groupTask.Result ?? new List<EscIndexGroup>();
+            _indexTypes = indexTask.Result ?? new List<IndexType>();
+
+            await SearchPeriodAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["기본 데이터를 불러오지 못했습니다.|Failed to load base data."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchPeriodAsync()
+    {
+        try
+        {
+            _loading = true;
+            _message = string.Empty;
+
+            var timeSeries = await IndexService.GetTimeSeriesAsync(year: _selectedYear);
+
+            var periodData = timeSeries
+                .Where(x => x.PeriodKey == CurrentPeriodKey)
+                .GroupBy(x => x.IndexTypeId)
+                .ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.Id).First());
+
+            _rows = _indexTypes
+                .Where(x => x.IsActive)
+                .OrderBy(x => GetGroupSortOrder(x.GroupCode))
+                .ThenBy(x => x.SortOrder)
+                .ThenBy(x => x.IndexName)
+                .Select(index =>
+                {
+                    periodData.TryGetValue(index.Id, out var saved);
+
+                    return new MonthlyRow
+                    {
+                        IndexTypeId = index.Id,
+                        IndexCode = index.IndexCode,
+                        IndexName = index.IndexName,
+                        IndexNameEn = index.IndexNameEn,
+                        GroupCode = index.GroupCode,
+                        Type = index.Type,
+                        Unit = index.Unit,
+                        SortOrder = index.SortOrder,
+                        IndexValue = saved?.IndexValue ?? 0,
+                        DataVerified = saved?.DataVerified ?? false
+                    };
+                })
+                .ToList();
+
+            _changedSet.Clear();
+            _dataLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["월별 데이터를 조회하지 못했습니다.|Failed to search monthly data."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void SelectGroup(string groupCode)
+    {
+        _selectedGroupCode = groupCode;
+    }
+
+    private void OnValueChanged(MonthlyRow row, ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString();
+
+        if (decimal.TryParse(raw, out var value))
+        {
+            row.IndexValue = value;
+            _changedSet.Add(row.IndexTypeId);
+            return;
+        }
+
+        ShowMessage(Text["숫자만 입력할 수 있습니다.|Only numbers are allowed."], true);
+    }
+
+    private void OnVerifyChanged(MonthlyRow row, ChangeEventArgs e)
+    {
+        row.DataVerified = e.Value is bool boolValue
+            ? boolValue
+            : bool.TryParse(e.Value?.ToString(), out var parsed) && parsed;
+
+        _changedSet.Add(row.IndexTypeId);
+    }
+
+    private void VerifyAll()
+    {
+        foreach (var row in FilteredRows)
+        {
+            row.DataVerified = true;
+            _changedSet.Add(row.IndexTypeId);
+        }
+    }
+
+    private void UnverifyAll()
+    {
+        foreach (var row in FilteredRows)
+        {
+            row.DataVerified = false;
+            _changedSet.Add(row.IndexTypeId);
+        }
+    }
+
+    private async Task SaveAllAsync()
+    {
+        if (!_hasChanges)
+        {
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+
+            var entries = _rows
+                .Where(x => _changedSet.Contains(x.IndexTypeId))
+                .Select(x => new IndexTimeSeries
+                {
+                    IndexTypeId = x.IndexTypeId,
+                    PeriodKey = CurrentPeriodKey,
+                    Year = _selectedYear,
+                    Month = _selectedMonth,
+                    IndexValue = x.IndexValue,
+                    DataVerified = x.DataVerified
+                })
+                .ToList();
+
+            var result = await IndexService.SaveTimeSeriesBatchAsync(entries);
+
+            if (!result.Success)
+            {
+                ShowMessage(result.Message, true);
+                return;
+            }
+
+            _changedSet.Clear();
+
+            ShowMessage(Text["월별 지수 데이터가 저장되었습니다.|Monthly index data saved successfully."], false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["저장 중 오류가 발생했습니다.|Error while saving."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task CopyPreviousMonthAsync()
+    {
+        try
+        {
+            _saving = true;
+
+            var result = await IndexService.CopyFromPreviousMonthAsync(CurrentPeriodKey);
+
+            if (!result.Success)
+            {
+                ShowMessage(result.Message, true);
+                return;
+            }
+
+            await SearchPeriodAsync();
+
+            ShowMessage(Text["이전 월 데이터를 복사했습니다.|Previous month data copied successfully."], false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["이전 월 복사 중 오류가 발생했습니다.|Error while copying previous month."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteMonthAsync()
+    {
+        try
+        {
+            _saving = true;
+
+            var result = await IndexService.DeleteMonthAsync(CurrentPeriodKey);
+
+            if (!result.Success)
+            {
+                ShowMessage(result.Message, true);
+                return;
+            }
+
+            await SearchPeriodAsync();
+
+            ShowMessage(Text["해당 월 데이터가 삭제되었습니다.|Month data deleted successfully."], false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(Text["월 데이터 삭제 중 오류가 발생했습니다.|Error while deleting month data."] + " " + ex.Message, true);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private string GetGroupDisplayName(EscIndexGroup group)
+    {
+        if (Text.IsKorean)
+        {
+            return string.IsNullOrWhiteSpace(group.GroupName) ? group.GroupCode : group.GroupName;
+        }
+
+        return string.IsNullOrWhiteSpace(group.GroupNameEn) ? group.GroupName : group.GroupNameEn;
+    }
+
+    private string GetGroupName(string groupCode)
+    {
+        var group = _groups.FirstOrDefault(x => x.GroupCode == groupCode);
+
+        return group == null ? groupCode : GetGroupDisplayName(group);
+    }
+
+    private string GetRowDisplayName(MonthlyRow row)
+    {
+        if (Text.IsKorean)
+        {
+            return string.IsNullOrWhiteSpace(row.IndexName) ? row.IndexCode : row.IndexName;
+        }
+
+        return string.IsNullOrWhiteSpace(row.IndexNameEn) ? row.IndexName : row.IndexNameEn;
+    }
+
+    private int GetGroupSortOrder(string groupCode)
+    {
+        var group = _groups.FirstOrDefault(x => x.GroupCode == groupCode);
+
+        return group?.SortOrder ?? 9999;
+    }
+
+    private static string GetIcon(string icon)
+    {
+        return string.IsNullOrWhiteSpace(icon) ? "fa-solid fa-layer-group" : icon;
+    }
+
+    private static string GetRowClass(MonthlyRow row)
+    {
+        var classes = new List<string>();
+
+        if (row.IndexValue == 0)
+        {
+            classes.Add("row-missing");
+        }
+
+        if (row.DataVerified)
+        {
+            classes.Add("row-verified");
+        }
+
+        return string.Join(" ", classes);
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+}

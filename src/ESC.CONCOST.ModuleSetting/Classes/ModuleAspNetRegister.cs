@@ -16,5 +16,6 @@ public class ModuleAspNetRegister : IModuleAspNet
     public void ConfigureServices(IServiceCollection services, IConfiguration config)
     {
         services.AddScoped<IEscFormulaSettingService, EscFormulaSettingService>();
+        services.AddScoped<IEscIndexService, EscIndexService>();
     }
 }

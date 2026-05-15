@@ -251,7 +251,19 @@
             <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/management/esc-formula-setting") ? "active" : "")"
                 @onclick='() => Navigate("/management/esc-formula-setting", "settings")'>
             <i class="fa-solid fa-calculator"></i>
-            @Text["ESC 계산식 설정|ESC Formula Settings"]
+            @Text["ESC 계산식|Formula"]
+            </button>   
+
+            <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/management/esc-index-setting") ? "active" : "")"
+                @onclick='() => Navigate("/management/esc-index-setting", "settings")'>
+            <i class="fa-solid fa-list-check"></i>
+            @Text["지수 설정|Index Setting"]
+            </button>   
+
+            <button class="esc-nav-pill @(NavigationManager.Uri.Contains("/management/esc-index-monthly") ? "active" : "")"
+                @onclick='() => Navigate("/management/esc-index-monthly", "settings")'>
+            <i class="fa-solid fa-calendar-days"></i>
+            @Text["지수 데이터|Index Data"]
             </button>   
   
         }
