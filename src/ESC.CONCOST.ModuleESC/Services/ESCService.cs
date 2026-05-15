@@ -971,4 +971,22 @@ public class ESCService : MyServiceBase, IESCService
             return Fail(_ctx.Text["계산 중 오류가 발생했습니다.|An error occurred during calculation."]);
         }
     }
+    private static string NormalizePeriodKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return value
+            .Replace("-", "")
+            .Replace(".", "")
+            .Replace("/", "")
+            .Trim();
+    }
+
+    private static string ToPeriodKey(DateTime? date)
+    {
+        return date.HasValue ? date.Value.ToString("yyyyMM") : string.Empty;
+    }
 }

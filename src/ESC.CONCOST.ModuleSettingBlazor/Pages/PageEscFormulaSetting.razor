@@ -2,12 +2,10 @@
 
 @inject ITextTranslator Text
 @inject IEscFormulaSettingService FormulaService
-@inject IJSRuntime JSRuntime
 
 @using ESC.CONCOST.Abstract
 @using ESC.CONCOST.ModuleSettingCore
-@using ESC.CONCOST.SharedComponents.Components
-@using System.Text.Json
+@using Microsoft.AspNetCore.Components.Forms
 
 <div class="esc-formula-page">
     <div class="esc-formula-hero">
@@ -17,47 +15,59 @@
                 @Text["관리자 설정|Admin Setting"]
             </div>
 
-            <h2>@Text["ESC 계산식 설정|ESC Formula Builder"]</h2>
+            <h2>@Text["ESC 계산식 설정|ESC Formula Setting"]</h2>
 
             <p>
-                @Text["계약 금액 조정(ESC)을 위한 10단계 계산식과 임계값을 설정합니다.|Configure the 10-step formula and thresholds for ESC adjustment."]
+                @Text["관리자가 ESC 계산식, 조정 조건, 반올림 방식, 선금공제 기준을 관리합니다. 현재 적용 계산식은 모든 사용자 계산에 자동 적용됩니다.|Admin manages ESC formulas, eligibility conditions, rounding, and advance deduction. The current formula is applied automatically to all user calculations."]
             </p>
 
-            <div class="esc-formula-current">
-                <span>@Text["현재 선택|Current"]</span>
-                <strong>@(_selectedFormula?.FormulaCode ?? "-")</strong>
+            <div class="esc-current-box">
+                <span>@Text["현재 적용 계산식|Current Applied Formula"]</span>
+                <strong>@(_currentFormula?.FormulaCode ?? "-")</strong>
 
-                @if (_selectedFormula?.IsCurrent == true)
+                @if (_currentFormula != null)
                 {
-                    <em class="esc-status esc-status-primary">Active</em>
-                }
-                
-                @if (_selectedFormula != null)
-                {
-                    <em class="esc-status esc-status-success">Ver @_selectedFormula.VersionNo</em>
+                    <em>@GetFormulaDisplayName(_currentFormula)</em>
+                    <em>Ver @_currentFormula.VersionNo</em>
                 }
             </div>
         </div>
 
-        <div class="esc-formula-hero-actions">
-            <button class="btn esc-btn-primary" @onclick="CreateFormula">
+        <div class="esc-hero-actions">
+            <button type="button"
+                    class="btn esc-btn-primary"
+                    @onclick="CreateFormula">
                 <i class="fa-solid fa-plus"></i>
                 @Text["새 계산식|New Formula"]
             </button>
 
-            <button class="btn esc-btn-outline" @onclick="DuplicateFormula" disabled="@(_selectedFormula == null)">
+            <button type="button"
+                    class="btn esc-btn-outline"
+                    disabled="@(_selectedFormula == null)"
+                    @onclick="DuplicateFormula">
                 <i class="fa-solid fa-copy"></i>
                 @Text["복사 생성|Duplicate"]
             </button>
 
-            <button class="btn esc-btn-outline"
-                    disabled="@(_selectedFormula == null || _selectedFormula.IsCurrent || !_selectedFormula.IsActive)"
-                    @onclick="() => SetCurrentAsync(_selectedFormula?.Guid ?? Guid.Empty)">
+            <button type="button"
+                    class="btn esc-btn-outline"
+                    disabled="@(!CanSetCurrent)"
+                    @onclick="SetCurrentSelectedAsync">
                 <i class="fa-solid fa-star"></i>
-                @Text["활성 계산식으로 설정|Set Active"]
+                @Text["현재 계산식으로 설정|Set Current"]
             </button>
 
-            <button class="btn esc-btn-outline" @onclick="LoadAsync">
+            <button type="button"
+                    class="btn esc-btn-danger-outline"
+                    disabled="@(!CanDeleteSelected)"
+                    @onclick="OpenDeleteConfirm">
+                <i class="fa-solid fa-trash-can"></i>
+                @Text["삭제|Delete"]
+            </button>
+
+            <button type="button"
+                    class="btn esc-btn-outline"
+                    @onclick="LoadAsync">
                 <i class="fa-solid fa-rotate"></i>
                 @Text["새로고침|Refresh"]
             </button>
@@ -66,33 +76,35 @@
 
     @if (!string.IsNullOrWhiteSpace(_message))
     {
-        <div class="alert @(_success ? "alert-success" : "alert-danger") esc-formula-alert alert-dismissible fade show">
+        <div class="alert @(_success ? "alert-success" : "alert-danger") esc-message alert-dismissible fade show">
             @_message
-            <button type="button" class="btn-close" @onclick="() => _message = null"></button>
+            <button type="button" class="btn-close" @onclick="ClearMessage"></button>
         </div>
     }
 
-    <div class="esc-formula-shell">
-        <aside class="esc-formula-library">
-            <div class="esc-panel-title-row">
+    <div class="esc-layout">
+        <aside class="esc-library">
+            <div class="esc-library-header">
                 <div>
                     <h3>@Text["계산식 목록|Formula Library"]</h3>
+                    <p>@Text["Current 표시가 있는 계산식이 실제 사용자 계산에 적용됩니다.|The formula marked Current is used for user calculations."]</p>
                 </div>
-                <span class="esc-count">@_formulas.Count</span>
+
+                <span>@_formulas.Count</span>
             </div>
 
             @if (_loading)
             {
-                <div class="esc-empty-state">
+                <div class="esc-empty">
                     <i class="fa-solid fa-spinner fa-spin"></i>
-                    <span>@Text["불러오는 중입니다...|Loading..."]</span>
+                    <p>@Text["불러오는 중입니다...|Loading..."]</p>
                 </div>
             }
             else if (_formulas.Count == 0)
             {
-                <div class="esc-empty-state">
+                <div class="esc-empty">
                     <i class="fa-regular fa-folder-open"></i>
-                    <span>@Text["등록된 계산식이 없습니다.|No formulas found."]</span>
+                    <p>@Text["등록된 계산식이 없습니다.|No formulas found."]</p>
                 </div>
             }
             else
@@ -101,336 +113,1408 @@
                     @foreach (var item in _formulas)
                     {
                         <button type="button"
-                                class="esc-formula-card @(item.Guid == _selectedFormula?.Guid ? "active" : "")"
+                                class="esc-formula-item @(item.Guid == _selectedFormula?.Guid ? "active" : "") @(item.IsActive ? "" : "inactive")"
                                 @onclick="() => SelectFormula(item)">
-                            <div class="esc-formula-card-head">
-                                <div>
-                                    <strong>@item.FormulaName</strong>
-                                </div>
-                                <div class="esc-card-badges">
+                            <div class="formula-item-top">
+                                <strong>@GetFormulaDisplayName(item)</strong>
+
+                                <div class="formula-badges">
                                     @if (item.IsCurrent)
                                     {
-                                        <span class="esc-status esc-status-primary">Active</span>
+                                        <span class="badge-current">Current</span>
+                                    }
+
+                                    @if (item.IsDefault)
+                                    {
+                                        <span class="badge-default">Default</span>
+                                    }
+
+                                    @if (!item.IsActive)
+                                    {
+                                        <span class="badge-inactive">Inactive</span>
                                     }
                                 </div>
                             </div>
-                            <div class="esc-formula-card-meta">
-                                <span><i class="fa-solid fa-code"></i> @item.FormulaCode</span>
-                                <span><i class="fa-solid fa-code-branch"></i> v@(item.VersionNo)</span>
+
+                            <div class="formula-item-code">
+                                <i class="fa-solid fa-code"></i>
+                                @item.FormulaCode
                             </div>
+
+                            <div class="formula-item-meta">
+                                <span>Ver @item.VersionNo</span>
+                                <span>@Text["정렬|Sort"] @item.SortOrder</span>
+                            </div>
+
+                            <p>@GetFormulaAdminDescription(item)</p>
                         </button>
                     }
                 </div>
             }
         </aside>
 
-        <main class="esc-formula-workspace">
-            @if (_selectedFormula != null)
+        <main class="esc-workspace">
+            @if (_selectedFormula == null)
+            {
+                <div class="esc-empty esc-empty-large">
+                    <i class="fa-solid fa-hand-pointer"></i>
+                    <p>@Text["계산식을 선택하거나 새로 생성하세요.|Select or create a formula."]</p>
+                </div>
+            }
+            else
             {
                 <EditForm Model="_editModel" OnValidSubmit="SaveFormulaAsync">
                     <DataAnnotationsValidator />
 
-                    <div class="esc-card mb-3">
-                        <div class="esc-card-header">
-                            <div>
+                    <div class="formula-status @GetStatusClass()">
+                        <div>
+                            <strong>@GetStatusTitle()</strong>
+                            <p>@GetStatusDescription()</p>
+                        </div>
+                    </div>
+
+                    <div class="esc-tabs">
+                        <button type="button"
+                                class="@GetTabClass("basic")"
+                                @onclick='() => SetTab("basic")'>
+                            <i class="fa-solid fa-circle-info"></i>
+                            @Text["기본 정보|Basic"]
+                        </button>
+
+                        <button type="button"
+                                class="@GetTabClass("option")"
+                                @onclick='() => SetTab("option")'>
+                            <i class="fa-solid fa-sliders"></i>
+                            @Text["조건/옵션|Options"]
+                        </button>
+
+                        <button type="button"
+                                class="@GetTabClass("formula")"
+                                @onclick='() => SetTab("formula")'>
+                            <i class="fa-solid fa-square-root-variable"></i>
+                            @Text["계산식|Formula"]
+                        </button>
+
+                        <button type="button"
+                                class="@GetTabClass("test")"
+                                @onclick='() => SetTab("test")'>
+                            <i class="fa-solid fa-vial"></i>
+                            @Text["테스트|Test"]
+                        </button>
+                    </div>
+
+                    @if (_activeTab == "basic")
+                    {
+                        <section class="esc-card">
+                            <div class="esc-card-title">
                                 <h3>@Text["기본 정보|Basic Information"]</h3>
+                                <p>@Text["관리자가 구분하기 쉬운 코드와 이름을 입력합니다.|Enter a code and name that admins can easily recognize."]</p>
                             </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <label class="esc-label">@Text["코드|Code"] <b>*</b></label>
-                                <InputText class="form-control esc-input" @bind-Value="_editModel.FormulaCode" />
-                            </div>
-                            <div class="col-md-4">
-                                <label class="esc-label">@Text["이름(한국어)|Name Korean"] <b>*</b></label>
-                                <InputText class="form-control esc-input" @bind-Value="_editModel.FormulaName" />
-                            </div>
-                            <div class="col-md-4">
-                                <label class="esc-label">@Text["이름(영어)|Name English"]</label>
-                                <InputText class="form-control esc-input" @bind-Value="_editModel.FormulaNameEn" />
-                            </div>
-                        </div>
-                    </div>
 
-                    <div class="esc-card mb-3">
-                        <div class="esc-card-header">
-                            <div>
-                                <h3>@Text["기준 설정|Thresholds & Options"]</h3>
-                            </div>
-                        </div>
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label class="esc-label">@Text["등락율 임계값 (%)|Threshold Rate (%)"]</label>
-                                <InputNumber class="form-control esc-input" @bind-Value="_editModel.ThresholdRate" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="esc-label">@Text["경과 일수 임계값|Threshold Days"]</label>
-                                <InputNumber class="form-control esc-input" @bind-Value="_editModel.ThresholdDays" />
-                            </div>
-                            <div class="col-md-3">
-                                <label class="esc-label">@Text["반올림 방식|Rounding Method"]</label>
-                                <InputSelect class="form-select esc-input" @bind-Value="_editModel.RoundingMethod">
-                                    <option value="@BasicCodes.EscFormulaRounding.Round">@Text["반올림|Round"]</option>
-                                    <option value="@BasicCodes.EscFormulaRounding.Floor">@Text["내림|Floor"]</option>
-                                    <option value="@BasicCodes.EscFormulaRounding.Ceiling">@Text["올림|Ceiling"]</option>
-                                    <option value="@BasicCodes.EscFormulaRounding.None">@Text["없음|None"]</option>
-                                </InputSelect>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="esc-label">@Text["소수점 자릿수|Decimal Places"]</label>
-                                <InputNumber class="form-control esc-input" @bind-Value="_editModel.DecimalPlaces" />
-                            </div>
-                            <div class="col-md-3 d-flex align-items-center mt-4">
-                                <div class="form-check form-switch">
-                                    <InputCheckbox class="form-check-input" id="useAdvanceDeduct" @bind-Value="_editModel.UseAdvanceDeduction" />
-                                    <label class="form-check-label" for="useAdvanceDeduct">@Text["선급금 공제 사용|Use Advance Deduction"]</label>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="esc-label">@Text["계산식 코드|Formula Code"] <b>*</b></label>
+                                    <InputText class="form-control esc-input"
+                                               placeholder="ESC_2026_V1"
+                                               @bind-Value="_editModel.FormulaCode" />
+                                    <small>@Text["예: ESC_2026_V1|Example: ESC_2026_V1"]</small>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="esc-label">@Text["이름(한국어)|Name Korean"] <b>*</b></label>
+                                    <InputText class="form-control esc-input"
+                                               placeholder="@Text["기본 ESC 계산식|Default ESC Formula"]"
+                                               @bind-Value="_editModel.FormulaName" />
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="esc-label">@Text["이름(영어)|Name English"]</label>
+                                    <InputText class="form-control esc-input"
+                                               placeholder="Default ESC Formula"
+                                               @bind-Value="_editModel.FormulaNameEn" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">@Text["버전|Version"]</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_editModel.VersionNo" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">@Text["정렬 순서|Sort Order"]</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_editModel.SortOrder" />
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="esc-label">@Text["상태|Status"]</label>
+
+                                    <div class="esc-check-grid">
+                                        <label class="esc-check">
+                                            <InputCheckbox @bind-Value="_editModel.IsActive" />
+                                            <span>
+                                                <strong>@Text["사용 가능|Active"]</strong>
+                                                <small>@Text["계산식 목록에서 사용 가능한 상태입니다.|Formula can be used."]</small>
+                                            </span>
+                                        </label>
+
+                                        <label class="esc-check">
+                                            <InputCheckbox @bind-Value="_editModel.IsCurrent" />
+                                            <span>
+                                                <strong>@Text["현재 적용|Current"]</strong>
+                                                <small>@Text["모든 사용자 계산에 적용됩니다.|Applied to all users."]</small>
+                                            </span>
+                                        </label>
+
+                                        <label class="esc-check">
+                                            <InputCheckbox @bind-Value="_editModel.IsDefault" />
+                                            <span>
+                                                <strong>@Text["기본값|Default"]</strong>
+                                                <small>@Text["시스템 기본 계산식으로 표시합니다.|Marked as default."]</small>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-12">
+                                    <label class="esc-label">@Text["설명|Description"]</label>
+                                    <InputTextArea class="form-control esc-input"
+                                                   rows="3"
+                                                   placeholder="@Text["변경 사유나 설명을 입력하세요.|Enter reason or description."]"
+                                                   @bind-Value="_editModel.Description" />
                                 </div>
                             </div>
-                            <div class="col-md-3">
-                                <label class="esc-label">@Text["기타 공제액 기본값|Other Deduction Default"]</label>
-                                <InputNumber class="form-control esc-input" @bind-Value="_editModel.OtherDeductionDefault" />
-                            </div>
-                        </div>
-                    </div>
+                        </section>
+                    }
 
-                    <div class="esc-card mb-3">
-                        <div class="esc-card-header">
-                            <div>
+                    @if (_activeTab == "option")
+                    {
+                        <section class="esc-card">
+                            <div class="esc-card-title">
+                                <h3>@Text["조건 및 옵션|Conditions & Options"]</h3>
+                                <p>@Text["조정 가능 여부 판단 기준과 반올림 방식을 설정합니다.|Set eligibility thresholds and rounding method."]</p>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="esc-label">@Text["등락율 기준 (%)|Threshold Rate (%)"]</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_editModel.ThresholdRate" />
+                                    <small>@Text["기본값 3%|Default 3%"]</small>
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">@Text["경과일수 기준|Threshold Days"]</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_editModel.ThresholdDays" />
+                                    <small>@Text["기본값 90일|Default 90 days"]</small>
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">@Text["반올림 방식|Rounding Method"]</label>
+                                    <InputSelect class="form-select esc-input" @bind-Value="_editModel.RoundingMethod">
+                                        <option value="@BasicCodes.EscFormulaRounding.Round">@Text["반올림|Round"]</option>
+                                        <option value="@BasicCodes.EscFormulaRounding.Floor">@Text["내림|Floor"]</option>
+                                        <option value="@BasicCodes.EscFormulaRounding.Ceiling">@Text["올림|Ceiling"]</option>
+                                        <option value="@BasicCodes.EscFormulaRounding.None">@Text["없음|None"]</option>
+                                    </InputSelect>
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">@Text["소수점 자릿수|Decimal Places"]</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_editModel.DecimalPlaces" />
+                                </div>
+
+                                <div class="col-md-4">
+                                    <label class="esc-label">@Text["기타 공제액 기본값|Other Deduction Default"]</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_editModel.OtherDeductionDefault" />
+                                </div>
+
+                                <div class="col-md-8">
+                                    <label class="esc-label">@Text["선금공제 사용 여부|Advance Deduction"]</label>
+
+                                    <label class="esc-check wide">
+                                        <InputCheckbox @bind-Value="_editModel.UseAdvanceDeduction" />
+                                        <span>
+                                            <strong>@Text["선금공제를 계산에 포함합니다.|Include advance deduction in calculation."]</strong>
+                                            <small>@Text["체크하면 선금공제 계산식이 최종 조정금액에 반영됩니다.|If checked, advance deduction formula is applied."]</small>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
+                    }
+
+                    @if (_activeTab == "formula")
+                    {
+                        <section class="esc-card">
+                            <div class="esc-card-title">
                                 <h3>@Text["계산식 작성|Formula Configuration"]</h3>
+                                <p>@Text["입력칸을 클릭한 뒤 변수나 연산자를 누르면 자동으로 추가됩니다.|Click an input field, then click variables or operators to insert them."]</p>
                             </div>
-                        </div>
-                        
-                        <div class="esc-expression-layout">
-                            <!-- Sidebar variables -->
-                            <div class="esc-sidebar-variables">
-                                <div class="esc-sub-card-title">
-                                    <i class="fa-solid fa-cubes"></i> @Text["변수 목록|Variables"]
-                                </div>
-                                <div class="esc-variable-list">
-                                    @foreach (var v in _variables)
-                                    {
-                                        <button type="button" class="esc-variable-chip" @onclick="() => InsertToken(v.VariableCode)">
-                                            <strong>@v.VariableCode</strong>
-                                            <span>@(Text.IsKorean ? v.VariableName : v.VariableNameEn)</span>
-                                        </button>
-                                    }
-                                </div>
-                                
-                                <div class="esc-sub-card-title mt-3">
-                                    <i class="fa-solid fa-square-root-variable"></i> @Text["함수 및 연산자|Functions"]
-                                </div>
-                                <div class="esc-operator-list">
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" + "))">+</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" - "))">-</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" * "))">*</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" / "))">/</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" ( "))">(</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" ) "))">)</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" ROUND( , 0) "))">ROUND</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" SUM( ) "))">SUM</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" >= "))">&gt;=</button>
-                                    <button type="button" class="esc-operator" @onclick="@(() => InsertToken(" AND "))">AND</button>
+
+                            <div class="formula-help">
+                                <strong>@Text["관리자 안내|Admin Guide"]</strong>
+                                <p>
+                                    @Text["잘 모르면 기본값을 유지하세요. 수정 후 반드시 테스트 계산을 실행하세요.|If unsure, keep defaults. After editing, always run test calculation."]
+                                </p>
+
+                                <div class="formula-examples">
+                                    <code>Amount / TotalCost</code>
+                                    <code>CompareIndex / BaseIndex</code>
+                                    <code>Weight * IndexRatio</code>
+                                    <code>SUM(WeightedRatio)</code>
+                                    <code>(CompositeCoefficient - 1) * 100</code>
                                 </div>
                             </div>
-                            
-                            <!-- Formula inputs -->
-                            <div class="esc-formula-inputs">
-                                <div class="formula-group">
-                                    <h5>@Text["1. 비목 계산 (각 항목별)|1. Item Calculation"]</h5>
-                                    
-                                    <label class="esc-label">WeightFormula (w_i)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.WeightFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.WeightFormula))" />
-                                    </div>
-                                    
-                                    <label class="esc-label mt-2">IndexRatioFormula (R_i)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.IndexRatioFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.IndexRatioFormula))" />
+
+                            <div class="formula-layout">
+                                <div class="formula-sidebar">
+                                    <h4>
+                                        <i class="fa-solid fa-cubes"></i>
+                                        @Text["변수 목록|Variables"]
+                                    </h4>
+
+                                    <div class="variable-list">
+                                        @foreach (var variable in _variables)
+                                        {
+                                            <button type="button"
+                                                    class="variable-chip"
+                                                    @onclick="() => InsertToken(variable.VariableCode)">
+                                                <strong>@variable.VariableCode</strong>
+                                                <span>@(Text.IsKorean ? variable.VariableName : variable.VariableNameEn)</span>
+                                            </button>
+                                        }
                                     </div>
 
-                                    <label class="esc-label mt-2">WeightedRatioFormula (w_i * R_i)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.WeightedRatioFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.WeightedRatioFormula))" />
-                                    </div>
-                                </div>
-                                
-                                <div class="formula-group mt-3">
-                                    <h5>@Text["2. 총괄 지수 (합산)|2. Composite Aggregate"]</h5>
-                                    <label class="esc-label">CompositeFormula (C)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.CompositeFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.CompositeFormula))" />
-                                    </div>
-                                </div>
+                                    <h4 class="mt-3">
+                                        <i class="fa-solid fa-square-root-variable"></i>
+                                        @Text["연산자|Operators"]
+                                    </h4>
 
-                                <div class="formula-group mt-3">
-                                    <h5>@Text["3. 대상 금액 및 변동율|3. Amount & Rate"]</h5>
-                                    <label class="esc-label">AdjustmentRateFormula (K)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.AdjustmentRateFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.AdjustmentRateFormula))" />
-                                    </div>
-                                    <label class="esc-label mt-2">ApplicableAmountFormula (D)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.ApplicableAmountFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.ApplicableAmountFormula))" />
+                                    <div class="operator-list">
+                                        <button type="button" @onclick='() => InsertToken(" + ")'>+</button>
+                                        <button type="button" @onclick='() => InsertToken(" - ")'>-</button>
+                                        <button type="button" @onclick='() => InsertToken(" * ")'>*</button>
+                                        <button type="button" @onclick='() => InsertToken(" / ")'>/</button>
+                                        <button type="button" @onclick='() => InsertToken(" ( ")'>(</button>
+                                        <button type="button" @onclick='() => InsertToken(" ) ")'>)</button>
+                                        <button type="button" @onclick='() => InsertToken("SUM(WeightedRatio)")'>SUM</button>
+                                        <button type="button" @onclick='() => InsertToken(" >= ")'>&gt;=</button>
+                                        <button type="button" @onclick='() => InsertToken(" <= ")'>&lt;=</button>
+                                        <button type="button" @onclick='() => InsertToken(" AND ")'>AND</button>
+                                        <button type="button" @onclick='() => InsertToken(" OR ")'>OR</button>
                                     </div>
                                 </div>
 
-                                <div class="formula-group mt-3">
-                                    <h5>@Text["4. 조정 금액 산출|4. Final Adjustment"]</h5>
-                                    <label class="esc-label">GrossAdjustmentFormula (G)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.GrossAdjustmentFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.GrossAdjustmentFormula))" />
-                                    </div>
-                                    <label class="esc-label mt-2">AdvanceDeductionFormula (F)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.AdvanceDeductionFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.AdvanceDeductionFormula))" />
-                                    </div>
-                                    <label class="esc-label mt-2">FinalAdjustmentFormula</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.FinalAdjustmentFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.FinalAdjustmentFormula))" />
-                                    </div>
-                                </div>
+                                <div class="formula-inputs">
+                                    @RenderFormulaInput(
+                                        Text["1. 가중치 계산식|1. Weight Formula"],
+                                        "WeightFormula",
+                                        Text["각 비목 금액이 전체 금액에서 차지하는 비율입니다.|Ratio of item amount to total amount."],
+                                        _editModel.WeightFormula,
+                                        nameof(_editModel.WeightFormula),
+                                        value => _editModel.WeightFormula = value)
 
-                                <div class="formula-group mt-3">
-                                    <h5>@Text["5. 조건식|5. Eligibility Condition"]</h5>
-                                    <label class="esc-label">EligibleConditionFormula (1 or 0)</label>
-                                    <div class="input-with-focus">
-                                        <InputText class="form-control esc-input" @bind-Value="_editModel.EligibleConditionFormula" @onfocus="() => SetFocusedInput(nameof(_editModel.EligibleConditionFormula))" />
-                                    </div>
+                                    @RenderFormulaInput(
+                                        Text["2. 지수비율 계산식|2. Index Ratio Formula"],
+                                        "IndexRatioFormula",
+                                        Text["비교월 지수를 기준월 지수로 나눈 값입니다.|Compare index divided by base index."],
+                                        _editModel.IndexRatioFormula,
+                                        nameof(_editModel.IndexRatioFormula),
+                                        value => _editModel.IndexRatioFormula = value)
+
+                                    @RenderFormulaInput(
+                                        Text["3. 가중 지수비율 계산식|3. Weighted Ratio Formula"],
+                                        "WeightedRatioFormula",
+                                        Text["가중치와 지수비율을 곱한 값입니다.|Weight multiplied by index ratio."],
+                                        _editModel.WeightedRatioFormula,
+                                        nameof(_editModel.WeightedRatioFormula),
+                                        value => _editModel.WeightedRatioFormula = value)
+
+                                    @RenderFormulaInput(
+                                        Text["4. 종합계수 계산식|4. Composite Formula"],
+                                        "CompositeFormula",
+                                        Text["모든 비목의 가중 지수비율을 합산합니다.|Sum weighted ratios of all items."],
+                                        _editModel.CompositeFormula,
+                                        nameof(_editModel.CompositeFormula),
+                                        value => _editModel.CompositeFormula = value)
+
+                                    @RenderFormulaInput(
+                                        Text["5. 등락율 계산식|5. Adjustment Rate Formula"],
+                                        "AdjustmentRateFormula",
+                                        Text["최종 변동률 K를 계산합니다.|Calculates final adjustment rate K."],
+                                        _editModel.AdjustmentRateFormula,
+                                        nameof(_editModel.AdjustmentRateFormula),
+                                        value => _editModel.AdjustmentRateFormula = value)
+
+                                    @RenderFormulaInput(
+                                        Text["6. 적용대가 계산식|6. Applicable Amount Formula"],
+                                        "ApplicableAmountFormula",
+                                        Text["계약금액에서 제외금액을 뺀 값입니다.|Contract amount minus excluded amount."],
+                                        _editModel.ApplicableAmountFormula,
+                                        nameof(_editModel.ApplicableAmountFormula),
+                                        value => _editModel.ApplicableAmountFormula = value)
+
+                                    @RenderFormulaInput(
+                                        Text["7. 조정금액 계산식|7. Gross Adjustment Formula"],
+                                        "GrossAdjustmentFormula",
+                                        Text["선금공제 전 조정금액입니다.|Adjustment amount before advance deduction."],
+                                        _editModel.GrossAdjustmentFormula,
+                                        nameof(_editModel.GrossAdjustmentFormula),
+                                        value => _editModel.GrossAdjustmentFormula = value)
+
+                                    @RenderFormulaInput(
+                                        Text["8. 선금공제 계산식|8. Advance Deduction Formula"],
+                                        "AdvanceDeductionFormula",
+                                        Text["선금이 있을 경우 조정금액에서 공제할 금액입니다.|Deduction amount when advance exists."],
+                                        _editModel.AdvanceDeductionFormula,
+                                        nameof(_editModel.AdvanceDeductionFormula),
+                                        value => _editModel.AdvanceDeductionFormula = value)
+
+                                    @RenderFormulaInput(
+                                        Text["9. 최종 조정금액 계산식|9. Final Adjustment Formula"],
+                                        "FinalAdjustmentFormula",
+                                        Text["최종적으로 사용자에게 표시되는 조정금액입니다.|Final adjustment amount shown to user."],
+                                        _editModel.FinalAdjustmentFormula,
+                                        nameof(_editModel.FinalAdjustmentFormula),
+                                        value => _editModel.FinalAdjustmentFormula = value)
+
+                                    @RenderFormulaInput(
+                                        Text["10. 조정 가능 조건식|10. Eligibility Condition Formula"],
+                                        "EligibleConditionFormula",
+                                        Text["등락율과 경과일수가 기준을 만족하는지 판단합니다.|Checks if rate and elapsed days meet thresholds."],
+                                        _editModel.EligibleConditionFormula,
+                                        nameof(_editModel.EligibleConditionFormula),
+                                        value => _editModel.EligibleConditionFormula = value)
                                 </div>
                             </div>
-                        </div>
+                        </section>
+                    }
 
-                        <div class="esc-sticky-actions">
-                            <button type="button" class="btn esc-btn-info" @onclick="TestFormula">
-                                <i class="fa-solid fa-vial"></i> @Text["테스트 계산|Test Calculation"]
-                            </button>
-                            <button type="submit" class="btn esc-btn-success">
-                                <i class="fa-solid fa-save"></i> @Text["저장|Save"]
-                            </button>
-                        </div>
-                    </div>
-                </EditForm>
-                
-                @if (_testResults != null)
-                {
-                    <div class="esc-card mb-3">
-                        <div class="esc-card-header">
-                            <h3><i class="fa-solid fa-chart-simple"></i> @Text["테스트 결과|Test Results"]</h3>
-                        </div>
-                        <div class="row">
-                            @foreach(var res in _testResults)
+                    @if (_activeTab == "test")
+                    {
+                        <section class="esc-card">
+                            <div class="esc-card-title">
+                                <h3>@Text["테스트 계산|Test Calculation"]</h3>
+                                <p>@Text["저장 전 샘플 값으로 계산식이 정상 동작하는지 확인합니다.|Before saving, check if the formula works with sample values."]</p>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="esc-label">Amount</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_testAmount" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">TotalCost</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_testTotalCost" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">BaseIndex</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_testBaseIndex" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">CompareIndex</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_testCompareIndex" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">ContractAmount</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_testContractAmount" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">ExcludedAmount</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_testExcludedAmount" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">AdvanceAmount</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_testAdvanceAmount" />
+                                </div>
+
+                                <div class="col-md-3">
+                                    <label class="esc-label">ElapsedDays</label>
+                                    <InputNumber class="form-control esc-input" @bind-Value="_testElapsedDays" />
+                                </div>
+
+                                <div class="col-md-12">
+                                    <button type="button"
+                                            class="btn esc-btn-info"
+                                            @onclick="TestFormulaAsync">
+                                        <i class="fa-solid fa-vial"></i>
+                                        @Text["테스트 계산 실행|Run Test Calculation"]
+                                    </button>
+                                </div>
+                            </div>
+
+                            @if (_testResults != null)
                             {
-                                <div class="col-md-4 mb-2">
-                                    <div class="esc-test-result-item">
-                                        <small>@res.Key</small>
-                                        <strong>@res.Value.ToString("N4")</strong>
+                                <div class="test-result-section">
+                                    <h4>@Text["테스트 결과|Test Results"]</h4>
+
+                                    <div class="test-result-grid">
+                                        @foreach (var result in _testResults.Variables)
+                                        {
+                                            <div class="test-result-item">
+                                                <small>@result.Key</small>
+                                                <strong>@result.Value.ToString("N4")</strong>
+                                            </div>
+                                        }
                                     </div>
                                 </div>
                             }
-                        </div>
+                        </section>
+                    }
+
+                    <div class="sticky-actions">
+                        <button type="button"
+                                class="btn esc-btn-light"
+                                @onclick="LoadAsync">
+                            <i class="fa-solid fa-rotate-left"></i>
+                            @Text["취소/다시 불러오기|Cancel / Reload"]
+                        </button>
+
+                        <button type="button"
+                                class="btn esc-btn-info"
+                                @onclick='() => SetTab("test")'>
+                            <i class="fa-solid fa-vial"></i>
+                            @Text["테스트로 이동|Go Test"]
+                        </button>
+
+                        <button type="submit"
+                                class="btn esc-btn-success">
+                            <i class="fa-solid fa-save"></i>
+                            @Text["저장|Save"]
+                        </button>
                     </div>
-                }
-            }
-            else
-            {
-                <div class="esc-empty-state">
-                    <i class="fa-solid fa-hand-pointer"></i>
-                    <span>@Text["계산식을 선택하거나 새로 생성하세요.|Select or create a formula."]</span>
-                </div>
+                </EditForm>
             }
         </main>
     </div>
+
+    @if (_showDeleteConfirm)
+    {
+        <div class="delete-backdrop">
+            <div class="delete-modal">
+                <div class="delete-icon">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+
+                <h4>@Text["계산식 삭제 확인|Confirm Formula Deletion"]</h4>
+
+                <p>
+                    @Text["계산식은 완전히 삭제되지 않고 비활성화됩니다. 기존 계산 기록 보호를 위한 안전한 삭제 방식입니다.|The formula will be deactivated, not permanently deleted. This protects old calculation history."]
+                </p>
+
+                <div class="delete-info">
+                    <div>
+                        <span>@Text["코드|Code"]</span>
+                        <strong>@_editModel.FormulaCode</strong>
+                    </div>
+
+                    <div>
+                        <span>@Text["이름|Name"]</span>
+                        <strong>@GetFormulaDisplayName(_editModel)</strong>
+                    </div>
+
+                    <div>
+                        <span>@Text["버전|Version"]</span>
+                        <strong>v@_editModel.VersionNo</strong>
+                    </div>
+                </div>
+
+                <div class="delete-warning">
+                    <i class="fa-solid fa-circle-info"></i>
+                    @Text["현재 사용 중인 계산식과 기본 계산식은 삭제할 수 없습니다.|Current and default formulas cannot be deleted."]
+                </div>
+
+                <div class="delete-actions">
+                    <button type="button" class="btn esc-btn-light" @onclick="CloseDeleteConfirm">
+                        @Text["취소|Cancel"]
+                    </button>
+
+                    <button type="button" class="btn esc-btn-danger" @onclick="DeleteFormulaAsync">
+                        <i class="fa-solid fa-trash-can"></i>
+                        @Text["삭제 처리|Delete"]
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 <style>
-    .esc-formula-page { padding: 24px 32px; background: #f4f7fb; min-height: calc(100vh - 80px); color: #102a4c; }
-    .esc-formula-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; background: linear-gradient(135deg, #102a4c, #1d4ed8); color: #fff; border-radius: 22px; padding: 24px; box-shadow: 0 16px 36px rgba(15, 23, 42, .16); margin-bottom: 18px; }
-    .esc-formula-kicker { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.14); padding: 7px 12px; border-radius: 999px; font-weight: 800; margin-bottom: 10px; }
-    .esc-formula-hero h2 { margin: 0; font-size: 2rem; font-weight: 900; }
-    .esc-formula-hero p { margin: 8px 0 0; color: rgba(255,255,255,.82); font-weight: 600; }
-    .esc-formula-current { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .esc-formula-current span { color: rgba(255,255,255,.75); font-weight: 700; }
-    .esc-formula-current strong { background: rgba(255,255,255,.16); padding: 5px 10px; border-radius: 10px; }
-    .esc-status { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-    .esc-status-primary { background: rgba(37, 99, 235, 0.15); color: #2563eb; border: 1px solid rgba(37, 99, 235, 0.3); }
-    .esc-status-success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .esc-formula-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-    .esc-btn-primary { background: #ff6b00; border: none; color: white; padding: 10px 20px; font-weight: 700; border-radius: 12px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(255, 107, 0, 0.3); }
-    .esc-btn-primary:hover { background: #e66000; transform: translateY(-2px); box-shadow: 0 6px 16px rgba(255, 107, 0, 0.4); color: white; }
-    .esc-btn-outline { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); color: white; padding: 10px 20px; font-weight: 700; border-radius: 12px; transition: all 0.2s; backdrop-filter: blur(8px); }
-    .esc-btn-outline:hover:not(:disabled) { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.4); }
-    .esc-btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
-    .esc-btn-success { background: #10b981; border: none; color: white; padding: 10px 24px; font-weight: 700; border-radius: 10px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
-    .esc-btn-success:hover { background: #059669; transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4); color: white; }
-    .esc-btn-info { background: #3b82f6; border: none; color: white; padding: 10px 24px; font-weight: 700; border-radius: 10px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
-    .esc-btn-info:hover { background: #2563eb; transform: translateY(-2px); color: white; }
-    
-    .esc-formula-shell { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
-    .esc-formula-library { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 20px rgba(15, 23, 42, .04); display: flex; flex-direction: column; gap: 16px; max-height: calc(100vh - 120px); overflow-y: auto; }
-    .esc-panel-title-row { display: flex; justify-content: space-between; align-items: center; }
-    .esc-panel-title-row h3 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #1e293b; }
-    .esc-count { background: #e2e8f0; color: #475569; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; }
-    .esc-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; background: #f8fafc; border-radius: 12px; border: 2px dashed #cbd5e1; color: #64748b; gap: 12px; text-align: center; }
-    .esc-empty-state i { font-size: 2rem; color: #94a3b8; }
-    
-    .esc-formula-list { display: flex; flex-direction: column; gap: 12px; }
-    .esc-formula-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; text-align: left; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 8px; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
-    .esc-formula-card:hover { border-color: #3b82f6; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1); }
-    .esc-formula-card.active { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2); }
-    .esc-formula-card-head { display: flex; justify-content: space-between; align-items: flex-start; }
-    .esc-formula-card-head strong { display: block; font-size: 1rem; color: #0f172a; margin-bottom: 2px; }
-    .esc-card-badges { display: flex; gap: 6px; }
-    .esc-formula-card-meta { display: flex; gap: 12px; font-size: 0.8rem; color: #64748b; font-family: 'JetBrains Mono', monospace; }
-    
-    .esc-formula-workspace { display: flex; flex-direction: column; gap: 20px; }
-    .esc-card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(15, 23, 42, .04); }
-    .esc-card-header { margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px; }
-    .esc-card-header h3 { margin: 0; font-size: 1.25rem; font-weight: 800; color: #0f172a; }
-    
-    .esc-label { display: block; font-size: 0.85rem; font-weight: 700; color: #475569; margin-bottom: 6px; }
-    .esc-label b { color: #ef4444; }
-    .esc-input { border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 14px; font-size: 0.95rem; font-family: 'JetBrains Mono', monospace; transition: border-color 0.2s, box-shadow 0.2s; }
-    .esc-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); outline: none; }
-    
-    .esc-expression-layout { display: grid; grid-template-columns: 280px 1fr; gap: 24px; margin-top: 10px; }
-    .esc-sidebar-variables { background: #f8fafc; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0; }
-    .esc-sub-card-title { font-size: 0.9rem; font-weight: 800; color: #334155; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-    
-    .esc-variable-list { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 5px; }
-    .esc-variable-chip { display: flex; flex-direction: column; align-items: flex-start; background: white; border: 1px solid #cbd5e1; padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; width: 100%; text-align: left; }
-    .esc-variable-chip:hover { border-color: #ff6b00; background: #fffaf5; }
-    .esc-variable-chip strong { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #1e293b; }
-    .esc-variable-chip span { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
-    
-    .esc-operator-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .esc-operator { background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #334155; cursor: pointer; transition: all 0.1s; }
-    .esc-operator:hover { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
-    
-    .esc-formula-inputs { display: flex; flex-direction: column; gap: 20px; }
-    .formula-group { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
-    .formula-group h5 { font-size: 1rem; font-weight: 800; color: #0f172a; margin-top: 0; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
-    .input-with-focus { position: relative; }
-    .input-with-focus:focus-within::before { content: ''; position: absolute; left: -16px; top: 50%; transform: translateY(-50%); width: 4px; height: 20px; background: #ff6b00; border-radius: 4px; }
-    
-    .esc-sticky-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #e2e8f0; }
-    
-    .esc-test-result-item { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 16px; border-radius: 10px; display: flex; flex-direction: column; }
-    .esc-test-result-item small { color: #64748b; font-size: 0.8rem; font-weight: 600; }
-    .esc-test-result-item strong { color: #0f172a; font-size: 1.1rem; font-family: 'JetBrains Mono', monospace; margin-top: 4px; }
+    .esc-formula-page {
+        padding: 24px 32px;
+        background: #f4f7fb;
+        min-height: calc(100vh - 80px);
+        color: #102a4c;
+    }
+
+    .esc-formula-hero {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 20px;
+        background: linear-gradient(135deg, #102a4c, #1d4ed8);
+        color: #fff;
+        border-radius: 22px;
+        padding: 24px;
+        box-shadow: 0 16px 36px rgba(15, 23, 42, .16);
+        margin-bottom: 18px;
+    }
+
+    .esc-formula-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, .14);
+        padding: 7px 12px;
+        border-radius: 999px;
+        font-weight: 800;
+        margin-bottom: 10px;
+    }
+
+    .esc-formula-hero h2 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 900;
+    }
+
+    .esc-formula-hero p {
+        margin: 8px 0 0;
+        color: rgba(255, 255, 255, .82);
+        font-weight: 600;
+        max-width: 800px;
+    }
+
+    .esc-current-box {
+        margin-top: 16px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+        .esc-current-box span {
+            color: rgba(255, 255, 255, .75);
+            font-weight: 700;
+        }
+
+        .esc-current-box strong,
+        .esc-current-box em {
+            background: rgba(255, 255, 255, .16);
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-style: normal;
+            font-weight: 800;
+        }
+
+    .esc-hero-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .esc-btn-primary,
+    .esc-btn-outline,
+    .esc-btn-info,
+    .esc-btn-success,
+    .esc-btn-light,
+    .esc-btn-danger,
+    .esc-btn-danger-outline {
+        padding: 10px 16px;
+        border-radius: 12px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        border: 0;
+    }
+
+    .esc-btn-primary {
+        background: #ff6b00;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(255, 107, 0, .3);
+    }
+
+    .esc-btn-outline {
+        background: rgba(255, 255, 255, .1);
+        border: 1px solid rgba(255, 255, 255, .24);
+        color: #fff;
+    }
+
+        .esc-btn-outline:disabled,
+        .esc-btn-danger-outline:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+    .esc-btn-info {
+        background: #3b82f6;
+        color: #fff;
+    }
+
+    .esc-btn-success {
+        background: #10b981;
+        color: #fff;
+    }
+
+    .esc-btn-light {
+        background: #f8fafc;
+        color: #334155;
+        border: 1px solid #cbd5e1;
+    }
+
+    .esc-btn-danger {
+        background: #dc2626;
+        color: #fff;
+    }
+
+    .esc-btn-danger-outline {
+        background: rgba(255, 255, 255, .1);
+        border: 1px solid rgba(248, 113, 113, .7);
+        color: #fecaca;
+    }
+
+    .esc-message {
+        border-radius: 14px;
+        font-weight: 700;
+        margin-bottom: 18px;
+    }
+
+    .esc-layout {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 24px;
+        align-items: start;
+    }
+
+    .esc-library,
+    .esc-card,
+    .esc-tabs,
+    .sticky-actions {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(15, 23, 42, .04);
+    }
+
+    .esc-library {
+        padding: 20px;
+        max-height: calc(100vh - 160px);
+        overflow-y: auto;
+    }
+
+    .esc-library-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+        .esc-library-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 900;
+            color: #1e293b;
+        }
+
+        .esc-library-header p {
+            margin: 4px 0 0;
+            color: #64748b;
+            font-size: .82rem;
+            line-height: 1.4;
+        }
+
+        .esc-library-header span {
+            background: #e2e8f0;
+            color: #475569;
+            padding: 2px 10px;
+            border-radius: 999px;
+            font-size: .8rem;
+            font-weight: 900;
+            height: fit-content;
+        }
+
+    .esc-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        background: #f8fafc;
+        border-radius: 12px;
+        border: 2px dashed #cbd5e1;
+        color: #64748b;
+        gap: 12px;
+        text-align: center;
+    }
+
+        .esc-empty i {
+            font-size: 2rem;
+            color: #94a3b8;
+        }
+
+    .esc-empty-large {
+        min-height: 420px;
+    }
+
+    .esc-formula-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .esc-formula-item {
+        width: 100%;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px;
+        text-align: left;
+        cursor: pointer;
+        transition: all .2s;
+    }
+
+        .esc-formula-item:hover {
+            border-color: #3b82f6;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, .1);
+        }
+
+        .esc-formula-item.active {
+            border-color: #2563eb;
+            background: #eff6ff;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, .16);
+        }
+
+        .esc-formula-item.inactive {
+            opacity: .65;
+            background: #f8fafc;
+        }
+
+    .formula-item-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+        .formula-item-top strong {
+            color: #0f172a;
+            font-weight: 900;
+        }
+
+    .formula-badges {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .badge-current,
+    .badge-default,
+    .badge-inactive {
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: .7rem;
+        font-weight: 900;
+    }
+
+    .badge-current {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .badge-default {
+        background: #cffafe;
+        color: #0e7490;
+    }
+
+    .badge-inactive {
+        background: #e2e8f0;
+        color: #475569;
+    }
+
+    .formula-item-code,
+    .formula-item-meta {
+        display: flex;
+        gap: 10px;
+        color: #64748b;
+        font-size: .8rem;
+        margin-top: 8px;
+        font-family: Consolas, monospace;
+    }
+
+    .esc-formula-item p {
+        margin: 8px 0 0;
+        color: #64748b;
+        font-size: .82rem;
+        line-height: 1.4;
+    }
+
+    .formula-status {
+        padding: 16px 18px;
+        border-radius: 16px;
+        border: 1px solid #e5e7eb;
+        margin-bottom: 16px;
+    }
+
+        .formula-status.current {
+            background: #ecfdf5;
+            border-color: #bbf7d0;
+        }
+
+        .formula-status.ready {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+        }
+
+        .formula-status.inactive {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .formula-status strong {
+            display: block;
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .formula-status p {
+            margin: 0;
+            color: #64748b;
+        }
+
+    .esc-tabs {
+        padding: 10px;
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        margin-bottom: 16px;
+    }
+
+        .esc-tabs button {
+            border: 0;
+            background: transparent;
+            color: #64748b;
+            font-weight: 900;
+            padding: 10px 14px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+            .esc-tabs button.active {
+                background: #ffedd5;
+                color: #ea580c;
+            }
+
+    .esc-card {
+        padding: 24px;
+    }
+
+    .esc-card-title {
+        padding-bottom: 14px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+        .esc-card-title h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 900;
+            color: #0f172a;
+        }
+
+        .esc-card-title p {
+            margin: 4px 0 0;
+            color: #64748b;
+        }
+
+    .esc-label {
+        display: block;
+        font-size: .85rem;
+        font-weight: 900;
+        color: #475569;
+        margin-bottom: 6px;
+    }
+
+        .esc-label b {
+            color: #ef4444;
+        }
+
+    .esc-input {
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: .95rem;
+    }
+
+        .esc-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, .15);
+            outline: none;
+        }
+
+    small {
+        color: #64748b;
+        font-size: .78rem;
+    }
+
+    .esc-check-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+    }
+
+    .esc-check {
+        display: flex;
+        gap: 10px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 12px;
+        cursor: pointer;
+        height: 100%;
+    }
+
+        .esc-check.wide {
+            max-width: 100%;
+        }
+
+        .esc-check input {
+            margin-top: 4px;
+        }
+
+        .esc-check strong {
+            display: block;
+            color: #0f172a;
+            font-weight: 900;
+        }
+
+        .esc-check small {
+            display: block;
+            line-height: 1.4;
+        }
+
+    .formula-help {
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        color: #9a3412;
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 18px;
+    }
+
+        .formula-help strong {
+            display: block;
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .formula-help p {
+            margin: 0 0 10px;
+        }
+
+    .formula-examples {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+        .formula-examples code {
+            background: #fff;
+            border: 1px solid #fed7aa;
+            border-radius: 8px;
+            padding: 5px 8px;
+            color: #7c2d12;
+        }
+
+    .formula-layout {
+        display: grid;
+        grid-template-columns: 290px 1fr;
+        gap: 24px;
+    }
+
+    .formula-sidebar {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px;
+        position: sticky;
+        top: 12px;
+        height: fit-content;
+    }
+
+        .formula-sidebar h4 {
+            font-size: .9rem;
+            font-weight: 900;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0 0 12px;
+        }
+
+    .variable-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 360px;
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+
+    .variable-chip {
+        width: 100%;
+        text-align: left;
+        background: #fff;
+        border: 1px solid #cbd5e1;
+        padding: 8px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+
+        .variable-chip:hover {
+            border-color: #ff6b00;
+            background: #fffaf5;
+        }
+
+        .variable-chip strong {
+            display: block;
+            font-family: Consolas, monospace;
+            font-size: .85rem;
+            color: #1e293b;
+        }
+
+        .variable-chip span {
+            display: block;
+            font-size: .75rem;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+    .operator-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+        .operator-list button {
+            background: #fff;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-family: Consolas, monospace;
+            font-weight: 900;
+            color: #334155;
+        }
+
+            .operator-list button:hover {
+                border-color: #3b82f6;
+                color: #3b82f6;
+                background: #eff6ff;
+            }
+
+    .formula-inputs {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .formula-input-block {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 14px;
+    }
+
+    .formula-input-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+        .formula-input-head span {
+            font-family: Consolas, monospace;
+            color: #2563eb;
+            font-size: .8rem;
+            font-weight: 900;
+        }
+
+    .formula-help-text {
+        color: #64748b;
+        font-size: .8rem;
+        margin-top: 6px;
+    }
+
+    .sticky-actions {
+        margin-top: 18px;
+        padding: 16px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        position: sticky;
+        bottom: 12px;
+        z-index: 20;
+    }
+
+    .test-result-section {
+        margin-top: 24px;
+        padding-top: 18px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+        .test-result-section h4 {
+            font-weight: 900;
+            margin-bottom: 12px;
+        }
+
+    .test-result-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+    }
+
+    .test-result-item {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        padding: 12px 16px;
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+    }
+
+        .test-result-item small {
+            color: #64748b;
+            font-weight: 700;
+        }
+
+        .test-result-item strong {
+            color: #0f172a;
+            font-size: 1.1rem;
+            font-family: Consolas, monospace;
+            margin-top: 4px;
+        }
+
+    .delete-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, .55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1200;
+        padding: 20px;
+    }
+
+    .delete-modal {
+        width: min(560px, 100%);
+        background: #fff;
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 28px 70px rgba(15, 23, 42, .32);
+    }
+
+    .delete-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 16px;
+        background: #fee2e2;
+        color: #dc2626;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        margin-bottom: 14px;
+    }
+
+    .delete-modal h4 {
+        margin: 0 0 8px;
+        font-weight: 900;
+    }
+
+    .delete-modal p {
+        color: #64748b;
+        line-height: 1.55;
+    }
+
+    .delete-info {
+        display: grid;
+        gap: 8px;
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 14px;
+    }
+
+        .delete-info div {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .delete-info span {
+            color: #64748b;
+        }
+
+        .delete-info strong {
+            color: #0f172a;
+            text-align: right;
+        }
+
+    .delete-warning {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 12px;
+        background: #fff7ed;
+        color: #9a3412;
+        font-size: 13px;
+    }
+
+    .delete-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 18px;
+    }
+
+    @@media (max-width: 1200px) {
+        .esc-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .esc-library {
+            max-height: 420px;
+        }
+
+        .formula-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .formula-sidebar {
+            position: static;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .esc-formula-page {
+            padding: 16px;
+        }
+
+        .esc-formula-hero {
+            flex-direction: column;
+        }
+
+        .esc-hero-actions {
+            justify-content: flex-start;
+        }
+
+        .esc-check-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .sticky-actions {
+            flex-direction: column;
+        }
+    }
 </style>
 
 @code {
     private List<EscFormulaSetting> _formulas = new();
     private List<EscFormulaVariable> _variables = new();
-    
+
     private EscFormulaSetting? _selectedFormula;
+    private EscFormulaSetting? _currentFormula;
     private EscFormulaSetting _editModel = new();
-    
+
     private bool _loading = true;
-    private string? _message;
     private bool _success;
+    private bool _showDeleteConfirm;
+
+    private string? _message;
     private string _focusedInput = string.Empty;
-    private Dictionary<string, decimal>? _testResults;
+    private string _activeTab = "basic";
+
+    private FormulaTestResultDto? _testResults;
+
+    private decimal _testAmount = 1_500_000m;
+    private decimal _testTotalCost = 10_000_000m;
+    private decimal _testBaseIndex = 100m;
+    private decimal _testCompareIndex = 105.5m;
+    private decimal _testContractAmount = 12_000_000m;
+    private decimal _testExcludedAmount = 500_000m;
+    private decimal _testAdvanceAmount = 1_000_000m;
+    private decimal _testElapsedDays = 120m;
+
+    private bool CanSetCurrent
+    {
+        get
+        {
+            if (_selectedFormula == null)
+            {
+                return false;
+            }
+
+            if (_selectedFormula.Guid == Guid.Empty)
+            {
+                return false;
+            }
+
+            if (_selectedFormula.IsCurrent)
+            {
+                return false;
+            }
+
+            if (!_selectedFormula.IsActive)
+            {
+                return false;
+            }
+
+            return true;
+        }
+    }
+
+    private bool CanDeleteSelected
+    {
+        get
+        {
+            if (_selectedFormula == null)
+            {
+                return false;
+            }
+
+            if (_selectedFormula.Guid == Guid.Empty)
+            {
+                return false;
+            }
+
+            if (_selectedFormula.IsCurrent)
+            {
+                return false;
+            }
+
+            if (_selectedFormula.IsDefault)
+            {
+                return false;
+            }
+
+            if (!_selectedFormula.IsActive)
+            {
+                return false;
+            }
+
+            return true;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -440,19 +1524,36 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        StateHasChanged();
+        _message = null;
 
         try
         {
-            _formulas = await FormulaService.GetFormulasAsync();
+            _formulas = await FormulaService.GetListAsync();
             _variables = await FormulaService.GetVariablesAsync();
-            
-            if (_formulas.Count > 0 && _selectedFormula == null)
+
+            _currentFormula = _formulas.FirstOrDefault(x => x.IsCurrent);
+
+            if (_formulas.Count == 0)
             {
-                SelectFormula(_formulas.First());
+                _selectedFormula = null;
+                _editModel = new EscFormulaSetting();
+                _testResults = null;
+                return;
+            }
+
+            var selectedGuid = _selectedFormula?.Guid ?? Guid.Empty;
+
+            var selected =
+                _formulas.FirstOrDefault(x => x.Guid == selectedGuid)
+                ?? _currentFormula
+                ?? _formulas.FirstOrDefault();
+
+            if (selected != null)
+            {
+                SelectFormula(selected);
             }
         }
-        catch (Exception ex)
+        catch
         {
             ShowMessage(false, Text["데이터를 불러오는 중 오류가 발생했습니다.|Error loading data."]);
         }
@@ -465,18 +1566,361 @@
     private void SelectFormula(EscFormulaSetting formula)
     {
         _selectedFormula = formula;
+        _editModel = CloneFormula(formula);
         _testResults = null;
-        
-        // Clone for edit
-        _editModel = new EscFormulaSetting
+    }
+
+    private void CreateFormula()
+    {
+        var nextVersion = _formulas.Count == 0
+            ? 1
+            : _formulas.Max(x => x.VersionNo) + 1;
+
+        _selectedFormula = new EscFormulaSetting();
+
+        _editModel = CreateDefaultFormula();
+        _editModel.Id = 0;
+        _editModel.Guid = Guid.Empty;
+        _editModel.VersionNo = nextVersion;
+        _editModel.FormulaCode = $"ESC_V{nextVersion}";
+        _editModel.FormulaName = $"ESC 계산식 v{nextVersion}";
+        _editModel.FormulaNameEn = $"ESC Formula v{nextVersion}";
+        _editModel.IsCurrent = false;
+        _editModel.IsDefault = false;
+        _editModel.IsActive = true;
+
+        _activeTab = "basic";
+        _testResults = null;
+        _message = null;
+    }
+
+    private void DuplicateFormula()
+    {
+        if (_selectedFormula == null)
+        {
+            return;
+        }
+
+        var source = CloneFormula(_editModel);
+
+        source.Id = 0;
+        source.Guid = Guid.Empty;
+        source.FormulaCode = string.IsNullOrWhiteSpace(source.FormulaCode)
+            ? "ESC_COPY"
+            : source.FormulaCode.Trim() + "_COPY";
+
+        source.FormulaName = string.IsNullOrWhiteSpace(source.FormulaName)
+            ? "ESC 계산식 복사본"
+            : source.FormulaName.Trim() + " 복사본";
+
+        source.FormulaNameEn = string.IsNullOrWhiteSpace(source.FormulaNameEn)
+            ? "ESC Formula Copy"
+            : source.FormulaNameEn.Trim() + " Copy";
+
+        source.IsCurrent = false;
+        source.IsDefault = false;
+        source.IsActive = true;
+        source.VersionNo = source.VersionNo <= 0 ? 1 : source.VersionNo + 1;
+
+        _selectedFormula = new EscFormulaSetting();
+        _editModel = source;
+        _activeTab = "basic";
+        _testResults = null;
+
+        ShowMessage(true, Text["복사본이 생성되었습니다. 저장해야 목록에 반영됩니다.|A copy has been created. Save it to apply to the list."]);
+    }
+
+    private async Task SaveFormulaAsync()
+    {
+        NormalizeEditModelBeforeSave();
+
+        var result = await FormulaService.SaveAsync(_editModel, "Saved via UI");
+
+        if (!result.Success)
+        {
+            ShowMessage(false, result.Message);
+            return;
+        }
+
+        ShowMessage(true, result.Message);
+
+        var savedCode = _editModel.FormulaCode;
+
+        await LoadAsync();
+
+        var saved = _formulas.FirstOrDefault(x => x.FormulaCode == savedCode);
+
+        if (saved != null)
+        {
+            SelectFormula(saved);
+        }
+    }
+
+    private async Task SetCurrentSelectedAsync()
+    {
+        if (_selectedFormula == null)
+        {
+            return;
+        }
+
+        if (_selectedFormula.Guid == Guid.Empty)
+        {
+            return;
+        }
+
+        var result = await FormulaService.SetCurrentAsync(_selectedFormula.Guid);
+
+        if (!result.Success)
+        {
+            ShowMessage(false, result.Message);
+            return;
+        }
+
+        ShowMessage(true, result.Message);
+
+        await LoadAsync();
+    }
+
+    private void OpenDeleteConfirm()
+    {
+        if (!CanDeleteSelected)
+        {
+            ShowMessage(false, Text["현재 사용 중이거나 기본 계산식은 삭제할 수 없습니다.|Current or default formula cannot be deleted."]);
+            return;
+        }
+
+        _showDeleteConfirm = true;
+    }
+
+    private void CloseDeleteConfirm()
+    {
+        _showDeleteConfirm = false;
+    }
+
+    private async Task DeleteFormulaAsync()
+    {
+        if (!CanDeleteSelected || _selectedFormula == null)
+        {
+            CloseDeleteConfirm();
+            ShowMessage(false, Text["삭제할 수 없는 계산식입니다.|This formula cannot be deleted."]);
+            return;
+        }
+
+        var result = await FormulaService.DeleteAsync(_selectedFormula.Guid, "Deleted via UI");
+
+        if (!result.Success)
+        {
+            ShowMessage(false, result.Message);
+            return;
+        }
+
+        _showDeleteConfirm = false;
+
+        ShowMessage(true, result.Message);
+
+        await LoadAsync();
+    }
+
+    private async Task TestFormulaAsync()
+    {
+        var mockVars = new FormulaTestInputDto()
+        {
+            Amount = _testAmount,
+            TotalCost = _testTotalCost,
+            BaseIndex = _testBaseIndex,
+            CompareIndex = _testCompareIndex,
+            ContractAmount = _testContractAmount,
+            ExcludedAmount = _testExcludedAmount,
+            AdvanceAmount = _testAdvanceAmount,
+            OtherDeduction = _editModel.OtherDeductionDefault,
+            ElapsedDays = _testElapsedDays,
+        };
+
+        var result = await FormulaService.TestFormulaAsync(_editModel, mockVars);
+
+        if (result.Success && result.Item != null)
+        {
+            _testResults = result.Item;
+            ShowMessage(true, Text["테스트 계산이 완료되었습니다.|Test calculation completed."]);
+        }
+        else
+        {
+            _testResults = null;
+            ShowMessage(false, result.Message);
+        }
+    }
+
+    private void InsertToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(_focusedInput))
+        {
+            ShowMessage(false, Text["먼저 수식 입력칸을 클릭하세요.|Please click a formula input first."]);
+            return;
+        }
+
+        var prop = typeof(EscFormulaSetting).GetProperty(_focusedInput);
+
+        if (prop == null || prop.PropertyType != typeof(string))
+        {
+            return;
+        }
+
+        var currentValue = prop.GetValue(_editModel) as string ?? string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(currentValue) && !currentValue.EndsWith(" "))
+        {
+            currentValue += " ";
+        }
+
+        prop.SetValue(_editModel, currentValue + token);
+
+        StateHasChanged();
+    }
+
+    private void SetFocusedInput(string inputName)
+    {
+        _focusedInput = inputName;
+    }
+
+    private void SetTab(string tab)
+    {
+        _activeTab = tab;
+    }
+
+    private string GetTabClass(string tab)
+    {
+        return _activeTab == tab ? "active" : string.Empty;
+    }
+
+    private string GetFormulaDisplayName(EscFormulaSetting formula)
+    {
+        if (Text.IsKorean)
+        {
+            return string.IsNullOrWhiteSpace(formula.FormulaName)
+                ? formula.FormulaCode
+                : formula.FormulaName;
+        }
+
+        return string.IsNullOrWhiteSpace(formula.FormulaNameEn)
+            ? formula.FormulaName
+            : formula.FormulaNameEn;
+    }
+
+    private string GetFormulaAdminDescription(EscFormulaSetting formula)
+    {
+        if (formula.IsCurrent)
+        {
+            return Text["현재 모든 사용자 계산에 적용 중입니다.|Currently applied to all user calculations."];
+        }
+
+        if (!formula.IsActive)
+        {
+            return Text["삭제 또는 비활성 처리된 계산식입니다.|Deleted or inactive formula."];
+        }
+
+        return Text["저장되어 있지만 아직 사용자 계산에 적용되지 않았습니다.|Saved but not applied to user calculations yet."];
+    }
+
+    private string GetStatusClass()
+    {
+        if (_editModel.IsCurrent)
+        {
+            return "current";
+        }
+
+        if (!_editModel.IsActive)
+        {
+            return "inactive";
+        }
+
+        return "ready";
+    }
+
+    private string GetStatusTitle()
+    {
+        if (_editModel.IsCurrent)
+        {
+            return Text["현재 적용 중인 계산식|Currently Applied Formula"];
+        }
+
+        if (!_editModel.IsActive)
+        {
+            return Text["비활성 계산식|Inactive Formula"];
+        }
+
+        return Text["저장 가능한 계산식|Editable Formula"];
+    }
+
+    private string GetStatusDescription()
+    {
+        if (_editModel.IsCurrent)
+        {
+            return Text["이 계산식은 현재 모든 사용자 계산에 자동 적용됩니다.|This formula is automatically applied to all user calculations."];
+        }
+
+        if (!_editModel.IsActive)
+        {
+            return Text["이 계산식은 사용자 계산에 사용되지 않습니다.|This formula is not used for user calculations."];
+        }
+
+        return Text["저장 후 현재 계산식으로 설정하면 사용자 계산에 적용됩니다.|After saving, set it as current to apply it to user calculations."];
+    }
+
+    private void NormalizeEditModelBeforeSave()
+    {
+        _editModel.FormulaCode = _editModel.FormulaCode?.Trim() ?? string.Empty;
+        _editModel.FormulaName = _editModel.FormulaName?.Trim() ?? string.Empty;
+        _editModel.FormulaNameEn = _editModel.FormulaNameEn?.Trim() ?? string.Empty;
+
+        _editModel.WeightFormula = _editModel.WeightFormula?.Trim() ?? string.Empty;
+        _editModel.IndexRatioFormula = _editModel.IndexRatioFormula?.Trim() ?? string.Empty;
+        _editModel.WeightedRatioFormula = _editModel.WeightedRatioFormula?.Trim() ?? string.Empty;
+        _editModel.CompositeFormula = _editModel.CompositeFormula?.Trim() ?? string.Empty;
+        _editModel.AdjustmentRateFormula = _editModel.AdjustmentRateFormula?.Trim() ?? string.Empty;
+        _editModel.ApplicableAmountFormula = _editModel.ApplicableAmountFormula?.Trim() ?? string.Empty;
+        _editModel.GrossAdjustmentFormula = _editModel.GrossAdjustmentFormula?.Trim() ?? string.Empty;
+        _editModel.AdvanceDeductionFormula = _editModel.AdvanceDeductionFormula?.Trim() ?? string.Empty;
+        _editModel.FinalAdjustmentFormula = _editModel.FinalAdjustmentFormula?.Trim() ?? string.Empty;
+        _editModel.EligibleConditionFormula = _editModel.EligibleConditionFormula?.Trim() ?? string.Empty;
+
+        if (_editModel.VersionNo <= 0)
+        {
+            _editModel.VersionNo = 1;
+        }
+
+        if (_editModel.ThresholdRate <= 0)
+        {
+            _editModel.ThresholdRate = 3m;
+        }
+
+        if (_editModel.ThresholdDays <= 0)
+        {
+            _editModel.ThresholdDays = 90;
+        }
+
+        if (_editModel.DecimalPlaces < 0)
+        {
+            _editModel.DecimalPlaces = 0;
+        }
+
+        if (string.IsNullOrWhiteSpace(_editModel.RoundingMethod))
+        {
+            _editModel.RoundingMethod = BasicCodes.EscFormulaRounding.Round;
+        }
+    }
+
+    private static EscFormulaSetting CloneFormula(EscFormulaSetting formula)
+    {
+        return new EscFormulaSetting
         {
             Id = formula.Id,
             Guid = formula.Guid,
+
             FormulaCode = formula.FormulaCode,
             FormulaName = formula.FormulaName,
             FormulaNameEn = formula.FormulaNameEn,
             VersionNo = formula.VersionNo,
-            
+
             WeightFormula = formula.WeightFormula,
             IndexRatioFormula = formula.IndexRatioFormula,
             WeightedRatioFormula = formula.WeightedRatioFormula,
@@ -487,26 +1931,31 @@
             AdvanceDeductionFormula = formula.AdvanceDeductionFormula,
             FinalAdjustmentFormula = formula.FinalAdjustmentFormula,
             EligibleConditionFormula = formula.EligibleConditionFormula,
-            
+
             ThresholdRate = formula.ThresholdRate,
             ThresholdDays = formula.ThresholdDays,
             RoundingMethod = formula.RoundingMethod,
             DecimalPlaces = formula.DecimalPlaces,
             UseAdvanceDeduction = formula.UseAdvanceDeduction,
             OtherDeductionDefault = formula.OtherDeductionDefault,
-            
-            IsCurrent = formula.IsCurrent,
+
+            IsDefault = formula.IsDefault,
             IsActive = formula.IsActive,
+            IsCurrent = formula.IsCurrent,
             SortOrder = formula.SortOrder,
             Description = formula.Description
         };
     }
 
-    private void CreateFormula()
+    private static EscFormulaSetting CreateDefaultFormula()
     {
-        _selectedFormula = new EscFormulaSetting();
-        _editModel = new EscFormulaSetting
+        return new EscFormulaSetting
         {
+            FormulaCode = "DEFAULT_ESC",
+            FormulaName = "기본 ESC 계산식",
+            FormulaNameEn = "Default ESC Formula",
+            VersionNo = 1,
+
             WeightFormula = "Amount / TotalCost",
             IndexRatioFormula = "CompareIndex / BaseIndex",
             WeightedRatioFormula = "Weight * IndexRatio",
@@ -517,111 +1966,76 @@
             AdvanceDeductionFormula = "AdvanceAmount / ContractAmount * GrossAdjustmentAmount",
             FinalAdjustmentFormula = "GrossAdjustmentAmount - AdvanceDeduction - OtherDeduction",
             EligibleConditionFormula = "AdjustmentRate >= ThresholdRate AND ElapsedDays >= ThresholdDays",
-            ThresholdRate = 3.0m,
-            ThresholdDays = 90
+
+            ThresholdRate = 3m,
+            ThresholdDays = 90,
+            RoundingMethod = BasicCodes.EscFormulaRounding.Round,
+            DecimalPlaces = 0,
+            UseAdvanceDeduction = true,
+            OtherDeductionDefault = 0,
+
+            IsDefault = false,
+            IsActive = true,
+            IsCurrent = false,
+            SortOrder = 1,
+            Description = "기본 물가변동 계산식"
         };
-        _testResults = null;
     }
 
-    private void DuplicateFormula()
-    {
-        if (_selectedFormula == null) return;
-        
-        _editModel.Id = 0;
-        _editModel.Guid = Guid.Empty;
-        _editModel.FormulaCode = _editModel.FormulaCode + "_COPY";
-        _editModel.FormulaName = _editModel.FormulaName + " (Copy)";
-        _editModel.IsCurrent = false;
-        
-        _selectedFormula = new EscFormulaSetting();
-        _testResults = null;
-    }
-
-    private async Task SaveFormulaAsync()
-    {
-        var res = await FormulaService.SaveFormulaAsync(_editModel);
-        if (res.Success)
-        {
-            ShowMessage(true, res.Message);
-            await LoadAsync();
-            
-            // Re-select the saved one
-            var saved = _formulas.FirstOrDefault(x => x.FormulaCode == _editModel.FormulaCode);
-            if (saved != null) SelectFormula(saved);
-        }
-        else
-        {
-            ShowMessage(false, res.Message);
-        }
-    }
-
-    private async Task SetCurrentAsync(Guid guid)
-    {
-        if (guid == Guid.Empty) return;
-        
-        // Ensure user wants to change current
-        var res = await FormulaService.SetActiveAsync(guid);
-        if (res.Success)
-        {
-            ShowMessage(true, res.Message);
-            await LoadAsync();
-        }
-        else
-        {
-            ShowMessage(false, res.Message);
-        }
-    }
-
-    private async Task TestFormula()
-    {
-        // Mock variables
-        var mockVars = new Dictionary<string, decimal>
-        {
-            { "Amount", 1500000 },
-            { "TotalCost", 10000000 },
-            { "BaseIndex", 100 },
-            { "CompareIndex", 105.5m },
-            { "ContractAmount", 12000000 },
-            { "ExcludedAmt", 500000 },
-            { "AdvanceAmt", 1000000 },
-            { "ElapsedDays", 120 }
-        };
-
-        var res = await FormulaService.TestFormulaAsync(_editModel, mockVars);
-        if (res.Success && res.Item != null)
-        {
-            _testResults = res.Item;
-            ShowMessage(true, Text["테스트 성공|Test successful"]);
-        }
-        else
-        {
-            _testResults = null;
-            ShowMessage(false, res.Message);
-        }
-    }
-
-    private void SetFocusedInput(string inputName)
-    {
-        _focusedInput = inputName;
-    }
-
-    private void InsertToken(string token)
-    {
-        if (string.IsNullOrEmpty(_focusedInput)) return;
-
-        var prop = typeof(EscFormulaSetting).GetProperty(_focusedInput);
-        if (prop != null && prop.PropertyType == typeof(string))
-        {
-            var currentValue = prop.GetValue(_editModel) as string ?? "";
-            prop.SetValue(_editModel, currentValue + token);
-            StateHasChanged();
-        }
-    }
-
-    private void ShowMessage(bool success, string msg)
+    private void ShowMessage(bool success, string message)
     {
         _success = success;
-        _message = msg;
+        _message = message;
         StateHasChanged();
     }
+
+    private void ClearMessage()
+    {
+        _message = null;
+    }
+
+    private RenderFragment RenderFormulaInput(
+        string label,
+        string code,
+        string help,
+        string value,
+        string focusName,
+        Action<string> onValueChanged) => builder =>
+    {
+        var seq = 0;
+
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "formula-input-block");
+
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "formula-input-head");
+
+        builder.OpenElement(seq++, "label");
+        builder.AddAttribute(seq++, "class", "esc-label");
+        builder.AddContent(seq++, label);
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "span");
+        builder.AddContent(seq++, code);
+        builder.CloseElement();
+
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "input");
+        builder.AddAttribute(seq++, "class", "form-control esc-input");
+        builder.AddAttribute(seq++, "value", value);
+        builder.AddAttribute(seq++, "onfocus", EventCallback.Factory.Create(this, () => SetFocusedInput(focusName)));
+        builder.AddAttribute(seq++, "onchange", EventCallback.Factory.Create<ChangeEventArgs>(this, e =>
+        {
+            onValueChanged(e.Value?.ToString() ?? string.Empty);
+        }));
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "div");
+        builder.AddAttribute(seq++, "class", "formula-help-text");
+        builder.AddContent(seq++, help);
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
 }
