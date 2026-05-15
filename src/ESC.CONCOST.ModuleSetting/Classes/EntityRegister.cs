@@ -20,9 +20,9 @@ public class EntityRegister : IEntityRegister
                v => Newtonsoft.Json.JsonConvert.SerializeObject(v),
                v => Newtonsoft.Json.JsonConvert.DeserializeObject<Guid[]>(v)
            );
-        modelBuilder.Entity<EscFormulaField>().HasAlternateKey(x => x.Guid);
         modelBuilder.Entity<EscFormulaSetting>().HasAlternateKey(x => x.Guid);
-        modelBuilder.Entity<EscFormulaFieldOption>().HasAlternateKey(x => x.Guid);
+        modelBuilder.Entity<EscFormulaVariable>().HasAlternateKey(x => x.Guid);
+        modelBuilder.Entity<EscFormulaHistory>().HasAlternateKey(x => x.Guid);
     }
     public void Seed(IDbContext db)
     {

@@ -7,6 +7,7 @@ using ESC.CONCOST.Abstract.Entities;
 using ESC.CONCOST.Base;
 using ESC.CONCOST.ModuleESCCore;
 using ESC.CONCOST.ModuleESCCore.Models;
+using ESC.CONCOST.Base.Engine;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -815,5 +816,159 @@ public class ESCService : MyServiceBase, IESCService
     private bool CanDeleteEscProject()
     {
         return _ctx.CheckPermission(PERMISSION.ESC_PROJECT_DELETE);
+    }
+
+    public async Task<Result> CalculateAdjustmentAsync(Guid contractGuid, string comparePeriodKey)
+    {
+        using var db = _ctx.ConnectDb();
+
+        try
+        {
+            var contract = await db.Set<Contract>()
+                .AsNoTracking()
+                .Include(x => x.Items)
+                .FirstOrDefaultAsync(x => x.Guid == contractGuid);
+
+            if (contract == null)
+            {
+                return Fail(_ctx.Text["계약 정보가 없습니다.|Contract information is missing."]);
+            }
+
+            var items = contract.Items.Where(x => x.IsActive).ToList();
+            if (items.Count == 0)
+            {
+                return (_ctx.Text["비목 정보가 없습니다.|Item information is missing."]);
+            }
+
+            var activeFormula = await db.Set<EscFormulaSetting>()
+                .AsNoTracking()
+                .Where(x => x.IsActive && x.IsCurrent)
+                .FirstOrDefaultAsync();
+
+            if (activeFormula == null)
+            {
+                return Fail(_ctx.Text["활성화된 계산식이 없습니다.|No active formula found."]);
+            }
+
+            // Prepare base period key (ContractDate)
+            string basePeriodKey = contract.ContractDate.ToString("yyyyMM");
+
+            // Load index time series for items
+            var indexKeys = items.Where(x => x.IndexKey.HasValue).Select(x => x.IndexKey.Value).Distinct().ToList();
+            var timeSeries = await db.Set<IndexTimeSeries>()
+                .AsNoTracking()
+                .Where(x => indexKeys.Contains(x.IndexTypeId) && (x.PeriodKey == basePeriodKey || x.PeriodKey == comparePeriodKey))
+                .ToListAsync();
+
+            decimal totalCost = items.Sum(x => x.Amount);
+
+            var adjustRecord = new AdjustRecord
+            {
+                ContractId = contract.Id,
+                AdjustNo = 1, // Can calculate max + 1
+                BidDateUsed = contract.BidDate,
+                CompareDateUsed = DateTime.ParseExact(comparePeriodKey + "01", "yyyyMMdd", CultureInfo.InvariantCulture),
+                ElapsedDays = (int)(DateTime.ParseExact(comparePeriodKey + "01", "yyyyMMdd", CultureInfo.InvariantCulture) - contract.BidDate).TotalDays,
+                Details = new List<AdjustItemDetail>()
+            };
+
+            var variablesList = new List<Dictionary<string, decimal>>();
+
+            foreach (var item in items)
+            {
+                decimal amount = item.Amount;
+                decimal baseIndex = 1;
+                decimal compareIndex = 1;
+
+                if (item.IndexKey.HasValue)
+                {
+                    baseIndex = timeSeries.FirstOrDefault(x => x.IndexTypeId == item.IndexKey && x.PeriodKey == basePeriodKey)?.IndexValue ?? 1m;
+                    compareIndex = timeSeries.FirstOrDefault(x => x.IndexTypeId == item.IndexKey && x.PeriodKey == comparePeriodKey)?.IndexValue ?? 1m;
+                }
+
+                var itemVars = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "Amount", amount },
+                    { "TotalCost", totalCost },
+                    { "BaseIndex", baseIndex },
+                    { "CompareIndex", compareIndex }
+                };
+
+                decimal weight = new FormulaEngine(activeFormula.WeightFormula, itemVars).Evaluate();
+                itemVars["Weight"] = weight;
+
+                decimal indexRatio = new FormulaEngine(activeFormula.IndexRatioFormula, itemVars).Evaluate();
+                itemVars["IndexRatio"] = indexRatio;
+
+                decimal weightedRatio = new FormulaEngine(activeFormula.WeightedRatioFormula, itemVars).Evaluate();
+                itemVars["WeightedRatio"] = weightedRatio;
+
+                variablesList.Add(itemVars);
+
+                adjustRecord.Details.Add(new AdjustItemDetail
+                {
+                    ItemId = item.Id,
+                    Amount = (long)amount,
+                    Weight = weight,
+                    Index0 = baseIndex,
+                    Index1 = compareIndex,
+                    KiValue = indexRatio,
+                    WiKi = weightedRatio
+                });
+            }
+
+            // Aggregate CompositeCoefficient
+            decimal compositeCoefficient = FormulaEngine.EvaluateAggregate(activeFormula.CompositeFormula, variablesList);
+
+            var globalVars = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "CompositeCoefficient", compositeCoefficient },
+                { "ContractAmount", contract.ContractAmount },
+                { "ExcludedAmount", contract.ExcludedAmt },
+                { "AdvanceAmount", contract.AdvanceAmt },
+                { "OtherDeduction", activeFormula.OtherDeductionDefault },
+                { "ThresholdRate", activeFormula.ThresholdRate },
+                { "ThresholdDays", activeFormula.ThresholdDays },
+                { "ElapsedDays", adjustRecord.ElapsedDays }
+            };
+
+            decimal adjustmentRate = new FormulaEngine(activeFormula.AdjustmentRateFormula, globalVars).Evaluate();
+            globalVars["AdjustmentRate"] = adjustmentRate;
+
+            decimal applicableAmount = new FormulaEngine(activeFormula.ApplicableAmountFormula, globalVars).Evaluate();
+            globalVars["ApplicableAmount"] = applicableAmount;
+
+            decimal grossAdjust = new FormulaEngine(activeFormula.GrossAdjustmentFormula, globalVars).Evaluate();
+            globalVars["GrossAdjustmentAmount"] = grossAdjust;
+
+            decimal advanceDeduct = new FormulaEngine(activeFormula.AdvanceDeductionFormula, globalVars).Evaluate();
+            globalVars["AdvanceDeduction"] = advanceDeduct;
+
+            decimal finalAdjust = new FormulaEngine(activeFormula.FinalAdjustmentFormula, globalVars).Evaluate();
+            globalVars["FinalAdjustmentAmount"] = finalAdjust;
+
+            decimal conditionMet = new FormulaEngine(activeFormula.EligibleConditionFormula, globalVars).Evaluate();
+
+            // Check if thresholds are met based on formula
+            bool isEligible = conditionMet != 0;
+
+            adjustRecord.KdValue = adjustmentRate;
+            adjustRecord.ApplyAmount = (long)applicableAmount;
+            adjustRecord.GrossAdjust = (long)grossAdjust;
+            adjustRecord.AdvanceDeduct = (long)advanceDeduct;
+            adjustRecord.NetAdjust = (long)finalAdjust;
+            adjustRecord.ThresholdMet = adjustmentRate >= activeFormula.ThresholdRate;
+            adjustRecord.DaysMet = adjustRecord.ElapsedDays >= activeFormula.ThresholdDays;
+
+            db.Set<AdjustRecord>().Add(adjustRecord);
+            await db.SaveChangesAsync();
+
+            return Ok(_ctx.Text["계산이 완료되었습니다.|Calculation completed successfully."]);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Error calculating adjustment for Contract Guid={ContractGuid}", contractGuid);
+            return Fail(_ctx.Text["계산 중 오류가 발생했습니다.|An error occurred during calculation."]);
+        }
     }
 }

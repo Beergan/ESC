@@ -24,6 +24,9 @@ public interface IESCService : IServiceBase
     [Post("ReadSampleFile")]
     Task<ResultOf<ContractWizardDto>> ReadSampleFileAsync([Body] ContractSampleFileRequest request);
 
+    [Post("CalculateAdjustment/{contractGuid}")]
+    Task<Result> CalculateAdjustmentAsync([Path] Guid contractGuid, [Query] string comparePeriodKey);
+
     [Delete("DeleteContract/{guid}")]
     Task<Result> DeleteContractAsync([Path] Guid guid);
 }

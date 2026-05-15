@@ -69,4 +69,14 @@ public class MyServiceBase : IServiceBase
 
         return query.Where(lambda);
     }
+
+    protected Result Ok(string message = "")
+    {
+        return new Result { Success = true, Message = message };
+    }
+
+    protected Result Fail(string message = "")
+    {
+        return new Result { Success = false, Message = message };
+    }
 }

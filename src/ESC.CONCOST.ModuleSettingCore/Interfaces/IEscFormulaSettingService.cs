@@ -10,23 +10,23 @@ public interface IEscFormulaSettingService
 {
     Task<List<EscFormulaSetting>> GetFormulasAsync();
 
-    Task<EscFormulaSetting?> GetFormulaWithFieldsAsync(Guid formulaGuid);
+    Task<EscFormulaSetting?> GetFormulaAsync(Guid formulaGuid);
 
-    Task<EscFormulaSetting?> GetDefaultFormulaWithFieldsAsync();
+    Task<EscFormulaSetting?> GetActiveFormulaAsync();
 
     Task<Result> SaveFormulaAsync(EscFormulaSetting formula);
 
-    Task<Result> SetDefaultAsync(Guid formulaGuid);
+    Task<Result> SetActiveAsync(Guid formulaGuid);
 
     Task<Result> DeleteFormulaAsync(Guid formulaGuid);
 
-    Task<Result> SaveFieldAsync(EscFormulaField field);
+    Task<List<EscFormulaVariable>> GetVariablesAsync();
 
-    Task<Result> DeleteFieldAsync(Guid fieldGuid);
+    Task<Result> SaveVariableAsync(EscFormulaVariable variable);
 
-    Task<Result> SaveFieldOptionAsync(EscFormulaFieldOption option);
+    Task<Result> DeleteVariableAsync(Guid variableGuid);
 
-    Task<Result> DeleteFieldOptionAsync(Guid optionGuid);
+    Task<List<EscFormulaHistory>> GetFormulaHistoryAsync(int formulaSettingId);
 
-    Task<ResultOf<decimal>> TestFormulaAsync(Guid formulaGuid, Dictionary<string, string> values);
+    Task<ResultOf<Dictionary<string, decimal>>> TestFormulaAsync(EscFormulaSetting formula, Dictionary<string, decimal> inputValues);
 }
